@@ -1,0 +1,4 @@
+<resources>
+    <color name="alert_bg">#1976D2</color>
+    <color name="alert_text">#FFFFFF</color>
+</resources>

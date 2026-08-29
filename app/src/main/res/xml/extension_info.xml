@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ExtensionInfo
+    displayName="@string/extension_name"
+    icon="@drawable/ic_launcher"
+    id="poi-ahead"
+    scansDevices="false">
+
+    <!-- Pagina POI — lista fonti acqua vicine con distanza -->
+    <DataType
+        typeId="poi-page"
+        displayName="@string/poi_page_name"
+        description="@string/poi_page_desc"
+        graphical="true"
+        icon="@drawable/ic_launcher" />
+
+</ExtensionInfo>

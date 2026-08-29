@@ -1,0 +1,23 @@
+<resources>
+    <string name="app_name">PoiAhead</string>
+    <string name="extension_name">PoiAhead</string>
+
+    <string name="poi_page_name">Water Ahead</string>
+    <string name="poi_page_desc">Nearby drinking water sources with distance</string>
+
+    <!-- Settings screen -->
+    <string name="settings_display">DISPLAY</string>
+    <string name="settings_popup">Popup alerts</string>
+    <string name="settings_beep">Beep with popup</string>
+    <string name="settings_map">Map icons</string>
+    <string name="settings_page">Data page</string>
+    <string name="settings_alerts">ALERTS</string>
+    <string name="settings_detour">Max detour</string>
+    <string name="settings_overlay_needed">Popup alerts need the overlay permission.</string>
+    <string name="settings_grant_overlay">GRANT OVERLAY PERMISSION</string>
+    <string name="settings_status_title">STATUS</string>
+
+    <!-- Popup -->
+    <string name="popup_navigate">NAVIGATE</string>
+    <string name="popup_dismiss">DISMISS</string>
+</resources>
