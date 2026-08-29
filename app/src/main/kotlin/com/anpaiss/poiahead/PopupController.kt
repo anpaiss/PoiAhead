@@ -56,6 +56,8 @@ class PopupController(
         windowManager = wm
 
         val dist = formatDistance(distanceM)
+        // Ombra sul testo chiaro per la leggibilità in pieno sole (lezione AxsRatio:
+        // il popup sta sopra la mappa, come i tile)
         val title = TextView(context).apply {
             text = poi.name ?: "Water fountain"
             setTextColor(Color.WHITE)
@@ -63,21 +65,25 @@ class PopupController(
             setTypeface(typeface, Typeface.BOLD)
             gravity = Gravity.CENTER
             maxLines = 1
+            setShadowLayer(dp(2f), 0f, dp(1f), 0xB3000000.toInt())
         }
         val subtitle = TextView(context).apply {
             text = "in $dist"
             setTextColor(Color.parseColor("#90CAF9"))
             textSize = 18f
             gravity = Gravity.CENTER
+            setShadowLayer(dp(2f), 0f, dp(1f), 0xB3000000.toInt())
         }
 
         val btnNavigate = Button(context).apply {
             text = context.getString(R.string.popup_navigate)
             setTextColor(Color.WHITE)
             textSize = 16f
+            setShadowLayer(dp(2f), 0f, dp(1f), 0xB3000000.toInt())
             background = GradientDrawable().apply {
                 cornerRadius = dp(6f)
-                setColor(Color.parseColor("#1976D2"))
+                // #1565C0: bianco su questo blu = 5.8:1 (il #1976D2 era 4.6:1, borderline)
+                setColor(Color.parseColor("#1565C0"))
             }
             setOnClickListener {
                 val p = currentPoi ?: return@setOnClickListener
