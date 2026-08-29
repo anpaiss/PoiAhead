@@ -147,7 +147,10 @@ class MainActivity : AppCompatActivity() {
             val f = File(filesDir, "poi_cache.json")
             if (f.exists()) JSONObject(f.readText()).optJSONArray("pois")?.length() ?: 0 else 0
         }.getOrDefault(0)
+        val position = if (prefs.lastKnownLocation != null) "known" else "not yet (needs a GPS fix)"
+        val route    = if (prefs.currentRouteBbox != null) "loaded" else "none"
         findViewById<TextView>(R.id.tv_status).text =
-            "Overlay permission: $overlay\nCached water POIs: $cached"
+            "Overlay permission: $overlay\nCached water POIs: $cached\n" +
+            "Last position: $position\nActive route: $route"
     }
 }

@@ -54,6 +54,7 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
     private val alertedIds = mutableSetOf<String>()
     @Volatile private var lastAlertMs = 0L
     @Volatile private var lastAroundFetchMs = 0L
+    private var lastSavedPos: Pair<Double, Double>? = null
 
     companion object {
         private const val TICK_MS             = 5_000L
@@ -64,6 +65,7 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
         private const val AROUND_REFRESH_MS   = 600_000L // ricontrolla copertura ogni 10 min
         private const val MAP_MAX_POIS        = 50
         private const val MAP_RANGE_M         = 10_000.0
+        private const val POS_SAVE_MIN_MOVE_M = 500.0
     }
 
     override val types by lazy {
@@ -143,12 +145,20 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
             return
         }
 
-        // Copertura attorno alla posizione (per giri senza route); salva anche
-        // l'ultima posizione nota per il preload manuale dalle impostazioni
+        // Ultima posizione nota per il preload manuale: subito al primo fix,
+        // poi a ogni spostamento significativo
+        val saved = lastSavedPos
+        if (saved == null ||
+            GeoUtils.haversineM(saved.first, saved.second, pos.first, pos.second) > POS_SAVE_MIN_MOVE_M
+        ) {
+            lastSavedPos = pos
+            prefs.lastKnownLocation = pos
+        }
+
+        // Copertura attorno alla posizione (per giri senza route)
         val now = System.currentTimeMillis()
         if (now - lastAroundFetchMs > AROUND_REFRESH_MS) {
             lastAroundFetchMs = now
-            prefs.lastKnownLocation = pos
             val bbox = GeoUtils.bboxOf(listOf(pos), AROUND_RADIUS_M)
             if (bbox != null) extensionScope.launch { repo.ensureCovered(bbox) }
         }
