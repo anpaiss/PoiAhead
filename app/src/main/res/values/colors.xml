@@ -1,4 +1,9 @@
 <resources>
     <color name="alert_bg">#1976D2</color>
     <color name="alert_text">#FFFFFF</color>
+
+    <!-- Pagina dati: tema giorno (il Karoo passa da solo a values-night al tramonto) -->
+    <color name="page_text">#000000</color>
+    <color name="page_distance">#1565C0</color>  <!-- 5.8:1 su bianco -->
+    <color name="page_muted">#666666</color>
 </resources>

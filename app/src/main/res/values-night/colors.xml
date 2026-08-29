@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Pagina dati: tema notte -->
+    <color name="page_text">#FFFFFF</color>
+    <color name="page_distance">#2196F3</color>  <!-- 6.7:1 su nero -->
+    <color name="page_muted">#9E9E9E</color>
+</resources>
