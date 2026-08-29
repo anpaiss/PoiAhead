@@ -155,20 +155,23 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
     }
 
     private fun tick() {
-        val pos = lastLocation
+        // Per mappa e pagina dati basta una posizione qualsiasi (fallback Home);
+        // i popup invece richiedono un fix GPS reale (gpsPos), vedi maybeAlert.
+        val gpsPos = lastLocation
+        val pos = gpsPos ?: prefs.lastKnownLocation ?: prefs.homeLocation
         if (pos == null) {
-            pageState.value = PoiPageState(enabled = prefs.pageEnabled, status = "Waiting for GPS")
+            pageState.value = PoiPageState(enabled = prefs.pageEnabled, status = "Waiting for position")
             return
         }
 
-        // Ultima posizione nota per il preload manuale: subito al primo fix,
-        // poi a ogni spostamento significativo
+        // Ultima posizione nota: solo fix GPS reali (mai il fallback Home),
+        // subito al primo fix e poi a ogni spostamento significativo
         val saved = lastSavedPos
-        if (saved == null ||
-            GeoUtils.haversineM(saved.first, saved.second, pos.first, pos.second) > POS_SAVE_MIN_MOVE_M
+        if (gpsPos != null && (saved == null ||
+            GeoUtils.haversineM(saved.first, saved.second, gpsPos.first, gpsPos.second) > POS_SAVE_MIN_MOVE_M)
         ) {
-            lastSavedPos = pos
-            prefs.lastKnownLocation = pos
+            lastSavedPos = gpsPos
+            prefs.lastKnownLocation = gpsPos
         }
 
         // Copertura attorno alla posizione (per giri senza route) e refresh
@@ -203,7 +206,7 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
             nearby.takeWhile { it.distanceM <= MAP_RANGE_M }.take(MAP_MAX_POIS).map { it.poi }
         } else emptyList()
 
-        maybeAlert(nearby, now)
+        if (gpsPos != null) maybeAlert(nearby, now)
     }
 
     private fun maybeAlert(nearby: List<NearbyPoi>, now: Long) {
