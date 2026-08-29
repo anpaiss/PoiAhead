@@ -56,6 +56,11 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
     @Volatile private var lastAlertMs = 0L
     @Volatile private var lastAroundFetchMs = 0L
     private var lastSavedPos: Pair<Double, Double>? = null
+    private var lastNavStateName = ""
+    private var snapshotTickCounter = 0
+    // Diagnostica alert: un log per (poi, motivo), per capire dai log post-giro
+    // perché un popup atteso non è scattato
+    private val alertDiagLogged = mutableSetOf<String>()
 
     companion object {
         private const val TICK_MS             = 5_000L
@@ -67,6 +72,7 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
         private const val MAP_MAX_POIS        = 50
         private const val MAP_RANGE_M         = 10_000.0
         private const val POS_SAVE_MIN_MOVE_M = 500.0
+        private const val SNAPSHOT_TICKS      = 12       // log timeline ogni ~60s
     }
 
     override val types by lazy {
@@ -78,7 +84,7 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
         logger = PoiAheadLogger(applicationContext)
         prefs  = Prefs(applicationContext)
         repo   = PoiRepository(applicationContext, logger)
-        popup  = PopupController(applicationContext, ::onNavigateTo, ::onDismissed)
+        popup  = PopupController(applicationContext, logger, ::onNavigateTo, ::onDismissed)
 
         runCatching {
             val pi = packageManager.getPackageInfo(packageName, 0)
@@ -100,6 +106,11 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
             OnNavigationState.Params, { _ -> }, {}
         ) { event: OnNavigationState ->
             val nav = event.state
+            val navName = nav::class.simpleName ?: "?"
+            if (navName != lastNavStateName) {
+                lastNavStateName = navName
+                logger.log("ROUTE", "Stato navigazione: $navName")
+            }
             val polyline = when (nav) {
                 is OnNavigationState.NavigationState.NavigatingRoute -> nav.routePolyline.orEmpty()
                 is OnNavigationState.NavigationState.NavigatingToDestination -> nav.polyline.orEmpty()
@@ -120,6 +131,9 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
 
         // ── Posizione ─────────────────────────────────────────────────────────
         consumerIds += karooSystem.addConsumer({ _ -> }, {}) { event: OnLocationChanged ->
+            if (lastLocation == null) {
+                logger.log("GPS  ", "Primo fix: %.5f, %.5f".format(event.lat, event.lng))
+            }
             lastLocation = event.lat to event.lng
         }
 
@@ -142,7 +156,12 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
         consumerIds += karooSystem.addConsumer(
             RideState.Params, { _ -> }, {}
         ) { state: RideState ->
-            rideActive = state is RideState.Recording
+            val recording = state is RideState.Recording
+            if (recording != rideActive) {
+                logger.log("RIDE ", if (recording) "Registrazione attiva — popup armati"
+                                    else "Registrazione sospesa — popup in pausa")
+            }
+            rideActive = recording
         }
 
         // ── Ticker ────────────────────────────────────────────────────────────
@@ -207,18 +226,42 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
         } else emptyList()
 
         if (gpsPos != null) maybeAlert(nearby, now)
+
+        // Snapshot periodico (1/min): timeline per l'analisi post-giro
+        snapshotTickCounter++
+        if (snapshotTickCounter >= SNAPSHOT_TICKS) {
+            snapshotTickCounter = 0
+            val nearest = nearby.firstOrNull()
+            logger.log("TICK ", "pos=${if (gpsPos != null) "gps" else "fallback"} " +
+                "ride=$rideActive poi=${all.size} " +
+                "nearest=${nearest?.let { "${it.poi.id}@${it.distanceM.toInt()}m" } ?: "-"}")
+        }
+    }
+
+    /** Un log per coppia (poi, motivo): spiega nei log perché un popup non è scattato. */
+    private fun logAlertSkip(poiId: String, reason: String) {
+        if (alertDiagLogged.add("$poiId|$reason")) {
+            logger.log("ALERT", "Skip POI $poiId: $reason")
+        }
     }
 
     private fun maybeAlert(nearby: List<NearbyPoi>, now: Long) {
-        if (!prefs.popupEnabled || !rideActive) return
-        if (now - lastAlertMs < COOLDOWN_MS) return
+        val inRadius = nearby.takeWhile { it.distanceM <= ALERT_RADIUS_M }
+        if (inRadius.isEmpty()) return
+        if (!prefs.popupEnabled) { logAlertSkip(inRadius.first().poi.id, "popup disattivati"); return }
+        if (!rideActive)        { logAlertSkip(inRadius.first().poi.id, "registrazione non attiva"); return }
+        if (now - lastAlertMs < COOLDOWN_MS) return  // transitorio: niente log
 
         val route = routePoints
-        val candidate = nearby.firstOrNull { np ->
-            np.poi.id !in alertedIds && if (route.size >= 2) {
+        val candidate = inRadius.firstOrNull { np ->
+            if (np.poi.id in alertedIds) return@firstOrNull false
+            if (route.size >= 2) {
                 // Con route: POI vicino e con deviazione entro la soglia scelta
-                np.distanceM <= ALERT_RADIUS_M &&
-                    GeoUtils.distanceToPolylineM(np.poi.lat, np.poi.lng, route) <= prefs.maxDetourM
+                val detour = GeoUtils.distanceToPolylineM(np.poi.lat, np.poi.lng, route)
+                if (detour > prefs.maxDetourM) {
+                    logAlertSkip(np.poi.id, "detour ${detour.toInt()}m > ${prefs.maxDetourM}m")
+                    false
+                } else true
             } else {
                 // Senza route: solo POI a cui stiamo passando davvero accanto
                 np.distanceM <= prefs.maxDetourM
@@ -284,8 +327,8 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
         )
     }
 
-    private fun onDismissed(poi: Poi) {
-        logger.log("ALERT", "POI ${poi.id} dismesso")
+    private fun onDismissed(poi: Poi, auto: Boolean) {
+        logger.log("ALERT", "POI ${poi.id} ${if (auto) "auto-dismiss per timeout" else "dismesso dall'utente"}")
     }
 
     // ── Layer icone sulla mappa ──────────────────────────────────────────────

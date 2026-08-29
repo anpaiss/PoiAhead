@@ -24,8 +24,10 @@ import android.widget.TextView
  */
 class PopupController(
     private val context: Context,
+    private val logger: PoiAheadLogger,
     private val onNavigate: (Poi) -> Unit,
-    private val onDismiss: (Poi) -> Unit,
+    /** secondo parametro: true se auto-dismiss per timeout, false se tap utente */
+    private val onDismiss: (Poi, Boolean) -> Unit,
 ) {
 
     private val handler = Handler(Looper.getMainLooper())
@@ -102,7 +104,7 @@ class PopupController(
             setOnClickListener {
                 val p = currentPoi ?: return@setOnClickListener
                 removeCurrent()
-                onDismiss(p)
+                onDismiss(p, false)
             }
         }
 
@@ -147,14 +149,18 @@ class PopupController(
             .onSuccess {
                 currentView = root
                 currentPoi  = poi
+                logger.log("POPUP", "Mostrato: POI ${poi.id} a ${dist}")
                 handler.postDelayed({ autoDismiss(poi) }, AUTO_DISMISS_MS)
+            }
+            .onFailure { e ->
+                logger.logError("POPUP", "addView fallita per POI ${poi.id}", e)
             }
     }
 
     private fun autoDismiss(poi: Poi) {
         if (currentPoi?.id == poi.id) {
             removeCurrent()
-            onDismiss(poi)
+            onDismiss(poi, true)
         }
     }
 
