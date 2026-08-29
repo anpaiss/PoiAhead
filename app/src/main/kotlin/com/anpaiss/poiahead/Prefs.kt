@@ -30,6 +30,11 @@ class Prefs(context: Context) {
         get() = sp.getInt(KEY_DETOUR, 100)
         set(v) { sp.edit().putInt(KEY_DETOUR, v).apply() }
 
+    /** Km dall'inizio registrazione prima dei quali i popup tacciono (0 = off). */
+    var quietStartKm: Int
+        get() = sp.getInt(KEY_QUIET_START, 5)
+        set(v) { sp.edit().putInt(KEY_QUIET_START, v).apply() }
+
     /** Raggio del preload manuale POI (km). */
     var preloadRadiusKm: Int
         get() = sp.getInt(KEY_PRELOAD_RADIUS, 25)
@@ -81,6 +86,7 @@ class Prefs(context: Context) {
         const val KEY_MAP    = "map_icons_enabled"
         const val KEY_PAGE   = "page_enabled"
         const val KEY_DETOUR = "max_detour_m"
+        const val KEY_QUIET_START = "quiet_start_km"
         const val KEY_PRELOAD_RADIUS = "preload_radius_km"
         const val KEY_LAST_LAT = "last_lat"
         const val KEY_LAST_LNG = "last_lng"

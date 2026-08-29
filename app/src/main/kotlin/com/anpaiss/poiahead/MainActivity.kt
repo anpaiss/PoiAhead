@@ -65,6 +65,22 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
+        val rgQuiet = findViewById<RadioGroup>(R.id.rg_quiet_start)
+        when (prefs.quietStartKm) {
+            0    -> rgQuiet.check(R.id.rb_quiet_off)
+            2    -> rgQuiet.check(R.id.rb_quiet_2)
+            10   -> rgQuiet.check(R.id.rb_quiet_10)
+            else -> rgQuiet.check(R.id.rb_quiet_5)
+        }
+        rgQuiet.setOnCheckedChangeListener { _, id ->
+            prefs.quietStartKm = when (id) {
+                R.id.rb_quiet_off -> 0
+                R.id.rb_quiet_2   -> 2
+                R.id.rb_quiet_10  -> 10
+                else              -> 5
+            }
+        }
+
         val rgRadius = findViewById<RadioGroup>(R.id.rg_preload_radius)
         when (prefs.preloadRadiusKm) {
             10   -> rgRadius.check(R.id.rb_radius_10)

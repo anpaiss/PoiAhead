@@ -13,6 +13,7 @@
     <string name="settings_page">Data page</string>
     <string name="settings_alerts">ALERTS</string>
     <string name="settings_detour">Max detour</string>
+    <string name="settings_quiet_start">No alerts for the first…</string>
     <string name="settings_overlay_needed">Popup alerts need the overlay permission.</string>
     <string name="settings_grant_overlay">GRANT OVERLAY PERMISSION</string>
     <string name="settings_status_title">STATUS</string>

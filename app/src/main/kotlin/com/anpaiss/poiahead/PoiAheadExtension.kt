@@ -3,6 +3,7 @@ package com.anpaiss.poiahead
 import io.hammerhead.karooext.KarooSystemService
 import io.hammerhead.karooext.extension.KarooExtension
 import io.hammerhead.karooext.internal.Emitter
+import io.hammerhead.karooext.models.DataType
 import io.hammerhead.karooext.models.HideSymbols
 import io.hammerhead.karooext.models.InRideAlert
 import io.hammerhead.karooext.models.LaunchPinDrop
@@ -10,9 +11,11 @@ import io.hammerhead.karooext.models.MapEffect
 import io.hammerhead.karooext.models.OnGlobalPOIs
 import io.hammerhead.karooext.models.OnLocationChanged
 import io.hammerhead.karooext.models.OnNavigationState
+import io.hammerhead.karooext.models.OnStreamState
 import io.hammerhead.karooext.models.PlayBeepPattern
 import io.hammerhead.karooext.models.RideState
 import io.hammerhead.karooext.models.ShowSymbols
+import io.hammerhead.karooext.models.StreamState
 import io.hammerhead.karooext.models.Symbol
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +52,7 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
     @Volatile private var lastLocation: Pair<Double, Double>? = null
     @Volatile private var routePoints: List<Pair<Double, Double>> = emptyList()
     @Volatile private var rideActive = false
+    @Volatile private var rideDistanceM = -1.0
     private var lastRoutePolyline = ""
 
     // Anti-spam popup: ogni POI avvisa una volta per sessione + cooldown globale
@@ -152,6 +156,18 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
             }
         }
 
+        // ── Distanza giro (per il "quiet start": niente popup nei primi km) ───
+        consumerIds += karooSystem.addConsumer(
+            OnStreamState.StartStreaming(DataType.Type.DISTANCE), { _ -> }, {}
+        ) { event: OnStreamState ->
+            (event.state as? StreamState.Streaming)?.dataPoint?.singleValue?.let {
+                // Unità da validare empiricamente (lezione TIME_TO_DESTINATION in ms):
+                // qui si assume metri, il log del primo valore lo conferma
+                if (rideDistanceM < 0) logger.log("DIST ", "DISTANCE: primo valore raw=$it (assunto metri)")
+                rideDistanceM = it
+            }
+        }
+
         // ── Stato uscita (mai resettare nulla sulle transizioni: churn continuo)
         consumerIds += karooSystem.addConsumer(
             RideState.Params, { _ -> }, {}
@@ -233,7 +249,8 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
             snapshotTickCounter = 0
             val nearest = nearby.firstOrNull()
             logger.log("TICK ", "pos=${if (gpsPos != null) "gps" else "fallback"} " +
-                "ride=$rideActive poi=${all.size} " +
+                "ride=$rideActive dist=${if (rideDistanceM >= 0) "${(rideDistanceM / 1000).toInt()}km" else "?"} " +
+                "poi=${all.size} " +
                 "nearest=${nearest?.let { "${it.poi.id}@${it.distanceM.toInt()}m" } ?: "-"}")
         }
     }
@@ -250,6 +267,14 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
         if (inRadius.isEmpty()) return
         if (!prefs.popupEnabled) { logAlertSkip(inRadius.first().poi.id, "popup disattivati"); return }
         if (!rideActive)        { logAlertSkip(inRadius.first().poi.id, "registrazione non attiva"); return }
+
+        // Quiet start: si parte con la borraccia piena — niente popup nei primi km.
+        // Distanza sconosciuta (stream mai arrivato) = si tace, scelta conservativa.
+        val quietKm = prefs.quietStartKm
+        if (quietKm > 0 && rideDistanceM < quietKm * 1000.0) {
+            logAlertSkip(inRadius.first().poi.id, "quiet start (${quietKm}km)")
+            return
+        }
         if (now - lastAlertMs < COOLDOWN_MS) return  // transitorio: niente log
 
         val route = routePoints
