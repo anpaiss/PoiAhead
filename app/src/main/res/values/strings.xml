@@ -17,6 +17,18 @@
     <string name="settings_grant_overlay">GRANT OVERLAY PERMISSION</string>
     <string name="settings_status_title">STATUS</string>
 
+    <!-- Offline preload -->
+    <string name="settings_preload">OFFLINE PRELOAD</string>
+    <string name="settings_preload_hint">Download water POIs around your last known position. Best done at home on Wi-Fi before a trip.</string>
+    <string name="settings_preload_radius">Radius</string>
+    <string name="settings_preload_button">DOWNLOAD POIS AROUND HERE</string>
+    <string name="settings_preload_route_button">DOWNLOAD POIS FOR CURRENT ROUTE</string>
+    <string name="preload_no_route">No active route — start navigation first.</string>
+    <string name="preload_no_location">No known position yet — start a ride once first.</string>
+    <string name="preload_running">Downloading…</string>
+    <string name="preload_done">Done — water POIs cached: %1$d</string>
+    <string name="preload_failed">Download failed — check the connection.</string>
+
     <!-- Popup -->
     <string name="popup_navigate">NAVIGATE</string>
     <string name="popup_dismiss">DISMISS</string>

@@ -17,6 +17,8 @@ import java.io.File
 class MainActivity : AppCompatActivity() {
 
     private lateinit var prefs: Prefs
+    private val logger by lazy { PoiAheadLogger(applicationContext) }
+    private val repo   by lazy { PoiRepository(applicationContext, logger) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,6 +64,68 @@ class MainActivity : AppCompatActivity() {
                 Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
             )
         }
+
+        val rgRadius = findViewById<RadioGroup>(R.id.rg_preload_radius)
+        when (prefs.preloadRadiusKm) {
+            10   -> rgRadius.check(R.id.rb_radius_10)
+            50   -> rgRadius.check(R.id.rb_radius_50)
+            else -> rgRadius.check(R.id.rb_radius_25)
+        }
+        rgRadius.setOnCheckedChangeListener { _, id ->
+            prefs.preloadRadiusKm = when (id) {
+                R.id.rb_radius_10 -> 10
+                R.id.rb_radius_50 -> 50
+                else              -> 25
+            }
+        }
+        findViewById<Button>(R.id.btn_preload).setOnClickListener {
+            val pos = prefs.lastKnownLocation
+            if (pos == null) {
+                showPreloadResult(getString(R.string.preload_no_location))
+            } else {
+                val radiusM = prefs.preloadRadiusKm * 1000.0
+                runPreload("attorno r=${prefs.preloadRadiusKm}km") { GeoUtils.bboxOf(listOf(pos), radiusM) }
+            }
+        }
+        findViewById<Button>(R.id.btn_preload_route).setOnClickListener {
+            val bbox = prefs.currentRouteBbox
+            if (bbox == null) {
+                showPreloadResult(getString(R.string.preload_no_route))
+            } else {
+                runPreload("route attiva") { bbox }
+            }
+        }
+    }
+
+    private fun showPreloadResult(text: String) {
+        findViewById<TextView>(R.id.tv_preload_result).apply {
+            visibility = View.VISIBLE
+            this.text = text
+        }
+    }
+
+    private fun runPreload(what: String, bboxProvider: () -> DoubleArray?) {
+        val btnAround = findViewById<Button>(R.id.btn_preload)
+        val btnRoute  = findViewById<Button>(R.id.btn_preload_route)
+        btnAround.isEnabled = false
+        btnRoute.isEnabled  = false
+        showPreloadResult(getString(R.string.preload_running))
+
+        Thread {
+            val bbox  = bboxProvider()
+            val ok    = bbox != null && repo.ensureCovered(bbox)
+            val count = repo.allPois().size
+            logger.log("FETCH", "Preload manuale ($what) ok=$ok — $count POI in cache")
+            runOnUiThread {
+                btnAround.isEnabled = true
+                btnRoute.isEnabled  = true
+                showPreloadResult(
+                    if (ok) getString(R.string.preload_done, count)
+                    else getString(R.string.preload_failed)
+                )
+                refreshStatus()
+            }
+        }.start()
     }
 
     override fun onResume() {

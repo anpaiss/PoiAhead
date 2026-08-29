@@ -111,6 +111,7 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
             routePoints = points
             logger.log("ROUTE", "Route: ${points.size} punti")
             val bbox = GeoUtils.bboxOf(points, ROUTE_MARGIN_M) ?: return@addConsumer
+            prefs.currentRouteBbox = bbox  // per il pulsante di preload manuale
             extensionScope.launch { repo.ensureCovered(bbox) }
         }
 
@@ -142,10 +143,12 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
             return
         }
 
-        // Copertura attorno alla posizione (per giri senza route)
+        // Copertura attorno alla posizione (per giri senza route); salva anche
+        // l'ultima posizione nota per il preload manuale dalle impostazioni
         val now = System.currentTimeMillis()
         if (now - lastAroundFetchMs > AROUND_REFRESH_MS) {
             lastAroundFetchMs = now
+            prefs.lastKnownLocation = pos
             val bbox = GeoUtils.bboxOf(listOf(pos), AROUND_RADIUS_M)
             if (bbox != null) extensionScope.launch { repo.ensureCovered(bbox) }
         }

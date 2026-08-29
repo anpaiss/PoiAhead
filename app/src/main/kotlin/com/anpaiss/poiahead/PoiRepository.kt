@@ -19,6 +19,7 @@ class PoiRepository(context: Context, private val logger: PoiAheadLogger) {
     private val file  = File(context.filesDir, "poi_cache.json")
     private val pois  = LinkedHashMap<String, Poi>()   // id → poi
     private val areas = mutableListOf<Area>()
+    private var loadedStamp = 0L  // lastModified del file al momento del load/save
 
     companion object {
         private const val TTL_MS = 30L * 24 * 3600 * 1000  // 30 giorni
@@ -31,7 +32,17 @@ class PoiRepository(context: Context, private val logger: PoiAheadLogger) {
     }
 
     @Synchronized
-    fun allPois(): List<Poi> = pois.values.toList()
+    fun allPois(): List<Poi> {
+        // Il preload manuale (MainActivity) scrive il file da un'altra istanza:
+        // se è cambiato su disco, ricarica — così i POI arrivano senza riavvio
+        if (file.exists() && file.lastModified() != loadedStamp) {
+            pois.clear()
+            areas.clear()
+            load()
+            logger.log("CACHE", "Cache ricaricata da disco: ${pois.size} POI, ${areas.size} aree")
+        }
+        return pois.values.toList()
+    }
 
     /** true se il bbox (s,w,n,e) è interamente dentro un'area coperta e fresca. */
     @Synchronized
@@ -87,6 +98,7 @@ class PoiRepository(context: Context, private val logger: PoiAheadLogger) {
                     p.optString("name").takeIf { it.isNotBlank() })
                 pois[poi.id] = poi
             }
+            loadedStamp = file.lastModified()
         }.onFailure { logger.logError("CACHE", "Cache illeggibile — si riparte vuoti", it) }
     }
 
@@ -107,6 +119,7 @@ class PoiRepository(context: Context, private val logger: PoiAheadLogger) {
                 }
             })
             file.writeText(root.toString())
+            loadedStamp = file.lastModified()
         }.onFailure { logger.logError("CACHE", "Salvataggio cache fallito", it) }
     }
 }
