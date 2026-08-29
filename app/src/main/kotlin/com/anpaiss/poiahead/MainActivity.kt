@@ -77,15 +77,7 @@ class MainActivity : AppCompatActivity() {
                 R.id.rb_radius_50 -> 50
                 else              -> 25
             }
-        }
-        findViewById<Button>(R.id.btn_preload).setOnClickListener {
-            val pos = prefs.lastKnownLocation
-            if (pos == null) {
-                showPreloadResult(getString(R.string.preload_no_location))
-            } else {
-                val radiusM = prefs.preloadRadiusKm * 1000.0
-                runPreload("attorno r=${prefs.preloadRadiusKm}km") { GeoUtils.bboxOf(listOf(pos), radiusM) }
-            }
+            checkHomeArea()  // raggio più ampio → può servire un nuovo download
         }
         findViewById<Button>(R.id.btn_preload_route).setOnClickListener {
             val bbox = prefs.currentRouteBbox
@@ -105,10 +97,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun runPreload(what: String, bboxProvider: () -> DoubleArray?) {
-        val btnAround = findViewById<Button>(R.id.btn_preload)
-        val btnRoute  = findViewById<Button>(R.id.btn_preload_route)
-        btnAround.isEnabled = false
-        btnRoute.isEnabled  = false
+        val btnRoute = findViewById<Button>(R.id.btn_preload_route)
+        btnRoute.isEnabled = false
         showPreloadResult(getString(R.string.preload_running))
 
         Thread {
@@ -117,8 +107,7 @@ class MainActivity : AppCompatActivity() {
             val count = repo.allPois().size
             logger.log("FETCH", "Preload manuale ($what) ok=$ok — $count POI in cache")
             runOnUiThread {
-                btnAround.isEnabled = true
-                btnRoute.isEnabled  = true
+                btnRoute.isEnabled = true
                 showPreloadResult(
                     if (ok) getString(R.string.preload_done, count)
                     else getString(R.string.preload_failed)
@@ -128,10 +117,39 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
+    /**
+     * Stato area Home + eventuale download automatico: se manca la copertura
+     * la scarica subito (aprire l'app sul WiFi = occasione perfetta).
+     */
+    private fun checkHomeArea() {
+        val tvHome = findViewById<TextView>(R.id.tv_home_area)
+        val home = prefs.homeLocation
+        if (home == null) {
+            tvHome.text = getString(R.string.home_area_none)
+            return
+        }
+        val radiusKm = prefs.preloadRadiusKm
+        Thread {
+            val bbox = GeoUtils.bboxOf(listOf(home), radiusKm * 1000.0)
+            var covered = bbox != null && repo.isCovered(bbox)
+            if (!covered && bbox != null) {
+                runOnUiThread { tvHome.text = getString(R.string.preload_running) }
+                covered = repo.ensureCovered(bbox)
+            }
+            val done = covered
+            runOnUiThread {
+                tvHome.text = if (done) getString(R.string.home_area_ok, radiusKm)
+                              else getString(R.string.home_area_pending, radiusKm)
+                refreshStatus()
+            }
+        }.start()
+    }
+
     override fun onResume() {
         super.onResume()
         refreshOverlayUi()
         refreshStatus()
+        checkHomeArea()
     }
 
     private fun refreshOverlayUi() {
@@ -147,7 +165,11 @@ class MainActivity : AppCompatActivity() {
             val f = File(filesDir, "poi_cache.json")
             if (f.exists()) JSONObject(f.readText()).optJSONArray("pois")?.length() ?: 0 else 0
         }.getOrDefault(0)
-        val position = if (prefs.lastKnownLocation != null) "known" else "not yet (needs a GPS fix)"
+        val position = when {
+            prefs.lastKnownLocation != null -> "known"
+            prefs.homeLocation != null      -> "from Home POI"
+            else                            -> "not yet (needs a GPS fix)"
+        }
         val route    = if (prefs.currentRouteBbox != null) "loaded" else "none"
         findViewById<TextView>(R.id.tv_status).text =
             "Overlay permission: $overlay\nCached water POIs: $cached\n" +

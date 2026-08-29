@@ -47,6 +47,20 @@ class Prefs(context: Context) {
             sp.edit().putString(KEY_ROUTE_BBOX, v?.joinToString(",")).apply()
         }
 
+    /** Posizione del POI "Home" dell'account Karoo (fallback preload senza fix GPS). */
+    var homeLocation: Pair<Double, Double>?
+        get() {
+            val lat = sp.getString(KEY_HOME_LAT, null)?.toDoubleOrNull() ?: return null
+            val lng = sp.getString(KEY_HOME_LNG, null)?.toDoubleOrNull() ?: return null
+            return lat to lng
+        }
+        set(v) {
+            sp.edit()
+                .putString(KEY_HOME_LAT, v?.first?.toString())
+                .putString(KEY_HOME_LNG, v?.second?.toString())
+                .apply()
+        }
+
     /** Ultima posizione nota, salvata dall'extension per il preload da fermo. */
     var lastKnownLocation: Pair<Double, Double>?
         get() {
@@ -71,5 +85,7 @@ class Prefs(context: Context) {
         const val KEY_LAST_LAT = "last_lat"
         const val KEY_LAST_LNG = "last_lng"
         const val KEY_ROUTE_BBOX = "route_bbox"
+        const val KEY_HOME_LAT = "home_lat"
+        const val KEY_HOME_LNG = "home_lng"
     }
 }

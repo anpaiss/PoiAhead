@@ -54,12 +54,28 @@ class PoiRepository(context: Context, private val logger: PoiAheadLogger) {
         }
     }
 
+    @Volatile private var fetchInFlight = false
+
     /**
      * Scarica i POI per il bbox se non già coperto. Da chiamare fuori dal main
      * thread. Restituisce true se la copertura è disponibile (da cache o rete).
+     * Un solo fetch alla volta: chiamate concorrenti sulla stessa area a cache
+     * fredda (extension + activity all'avvio) non duplicano il download.
      */
     fun ensureCovered(bbox: DoubleArray): Boolean {
         if (isCovered(bbox)) return true
+        synchronized(this) {
+            if (fetchInFlight) return isCovered(bbox)
+            fetchInFlight = true
+        }
+        try {
+            return fetch(bbox)
+        } finally {
+            fetchInFlight = false
+        }
+    }
+
+    private fun fetch(bbox: DoubleArray): Boolean {
         return try {
             val fetched = OverpassClient.fetchDrinkingWater(bbox)
             merge(bbox, fetched)

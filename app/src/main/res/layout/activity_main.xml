@@ -161,6 +161,15 @@
         </RadioGroup>
 
         <TextView
+            android:id="@+id/tv_home_area"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textColor="#BDBDBD"
+            android:textSize="16sp"
+            android:text="—" />
+
+        <TextView
             android:id="@+id/tv_preload_result"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -168,13 +177,6 @@
             android:textColor="#FFB300"
             android:textSize="16sp"
             android:visibility="gone" />
-
-        <Button
-            android:id="@+id/btn_preload"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/settings_preload_button" />
 
         <Button
             android:id="@+id/btn_preload_route"

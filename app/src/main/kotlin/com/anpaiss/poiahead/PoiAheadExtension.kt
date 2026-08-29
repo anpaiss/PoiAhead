@@ -7,6 +7,7 @@ import io.hammerhead.karooext.models.HideSymbols
 import io.hammerhead.karooext.models.InRideAlert
 import io.hammerhead.karooext.models.LaunchPinDrop
 import io.hammerhead.karooext.models.MapEffect
+import io.hammerhead.karooext.models.OnGlobalPOIs
 import io.hammerhead.karooext.models.OnLocationChanged
 import io.hammerhead.karooext.models.OnNavigationState
 import io.hammerhead.karooext.models.PlayBeepPattern
@@ -122,6 +123,21 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
             lastLocation = event.lat to event.lng
         }
 
+        // ── POI account (Home): area di casa scaricata in automatico ──────────
+        consumerIds += karooSystem.addConsumer(
+            OnGlobalPOIs.Params, { _ -> }, {}
+        ) { event: OnGlobalPOIs ->
+            val home = event.pois.firstOrNull { it.type == Symbol.POI.Types.HOME }
+            if (home != null) {
+                if (prefs.homeLocation?.first != home.lat) {
+                    logger.log("POI  ", "Home dell'account: %.5f, %.5f (${event.pois.size} POI account)"
+                        .format(home.lat, home.lng))
+                }
+                prefs.homeLocation = home.lat to home.lng
+                ensureHomeCoverage()
+            }
+        }
+
         // ── Stato uscita (mai resettare nulla sulle transizioni: churn continuo)
         consumerIds += karooSystem.addConsumer(
             RideState.Params, { _ -> }, {}
@@ -155,12 +171,14 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
             prefs.lastKnownLocation = pos
         }
 
-        // Copertura attorno alla posizione (per giri senza route)
+        // Copertura attorno alla posizione (per giri senza route) e refresh
+        // periodico dell'area di casa (no-op finché la cache è fresca)
         val now = System.currentTimeMillis()
         if (now - lastAroundFetchMs > AROUND_REFRESH_MS) {
             lastAroundFetchMs = now
             val bbox = GeoUtils.bboxOf(listOf(pos), AROUND_RADIUS_M)
             if (bbox != null) extensionScope.launch { repo.ensureCovered(bbox) }
+            ensureHomeCoverage()
         }
 
         val all = repo.allPois()
@@ -233,6 +251,18 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
                     PlayBeepPattern.Tone(800, 200),
                 ))
             )
+        }
+    }
+
+    /** Copre l'area attorno al POI Home col raggio scelto. No-op se già in cache. */
+    private fun ensureHomeCoverage() {
+        val home = prefs.homeLocation ?: return
+        val bbox = GeoUtils.bboxOf(listOf(home), prefs.preloadRadiusKm * 1000.0) ?: return
+        if (repo.isCovered(bbox)) return
+        extensionScope.launch {
+            if (repo.ensureCovered(bbox)) {
+                logger.log("FETCH", "Area Home coperta (r=${prefs.preloadRadiusKm}km)")
+            }
         }
     }
 
