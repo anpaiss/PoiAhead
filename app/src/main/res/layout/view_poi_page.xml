@@ -13,7 +13,7 @@
         android:id="@+id/tv_page_header"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="WATER AHEAD"
+        android:text="POI AHEAD"
         android:textColor="@color/page_muted"
         android:textSize="14sp"
         android:letterSpacing="0.1"
