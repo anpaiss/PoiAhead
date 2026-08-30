@@ -55,8 +55,9 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
     @Volatile private var rideDistanceM = -1.0
     private var lastRoutePolyline = ""
 
-    // Anti-spam popup: ogni POI avvisa una volta per sessione + cooldown globale
-    private val alertedIds = mutableSetOf<String>()
+    // Anti-spam popup: per ogni POI l'orario dell'ultimo avviso (ri-arma dopo
+    // REARM_MS: nei giri andata/ritorno la stessa fontana torna utile) + cooldown
+    private val alertedAt = mutableMapOf<String, Long>()
     @Volatile private var lastAlertMs = 0L
     @Volatile private var lastAroundFetchMs = 0L
     private var lastSavedPos: Pair<Double, Double>? = null
@@ -68,8 +69,8 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
 
     companion object {
         private const val TICK_MS             = 5_000L
-        private const val ALERT_RADIUS_M      = 400.0    // distanza a cui scatta l'avviso (con route)
         private const val COOLDOWN_MS         = 120_000L // tra un popup e il successivo
+        private const val REARM_MS            = 30 * 60_000L // stesso POI ri-avvisabile dopo 30 min
         private const val ROUTE_MARGIN_M      = 1_000.0  // corridoio fetch attorno alla route
         private const val AROUND_RADIUS_M     = 5_000.0  // raggio fetch senza route
         private const val AROUND_REFRESH_MS   = 600_000L // ricontrolla copertura ogni 10 min
@@ -263,7 +264,7 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
     }
 
     private fun maybeAlert(nearby: List<NearbyPoi>, now: Long) {
-        val inRadius = nearby.takeWhile { it.distanceM <= ALERT_RADIUS_M }
+        val inRadius = nearby.takeWhile { it.distanceM <= prefs.alertRadiusM }
         if (inRadius.isEmpty()) return
         if (!prefs.popupEnabled) { logAlertSkip(inRadius.first().poi.id, "popup disattivati"); return }
         if (!rideActive)        { logAlertSkip(inRadius.first().poi.id, "registrazione non attiva"); return }
@@ -279,7 +280,8 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
 
         val route = routePoints
         val candidate = inRadius.firstOrNull { np ->
-            if (np.poi.id in alertedIds) return@firstOrNull false
+            val lastAlert = alertedAt[np.poi.id]
+            if (lastAlert != null && now - lastAlert < REARM_MS) return@firstOrNull false
             if (route.size >= 2) {
                 // Con route: POI vicino e con deviazione entro la soglia scelta
                 val detour = GeoUtils.distanceToPolylineM(np.poi.lat, np.poi.lng, route)
@@ -293,7 +295,7 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
             }
         } ?: return
 
-        alertedIds += candidate.poi.id
+        alertedAt[candidate.poi.id] = now
         lastAlertMs = now
         logger.log("ALERT", "POI ${candidate.poi.id} (${candidate.poi.name ?: "senza nome"}) " +
             "a ${candidate.distanceM.toInt()}m — popup=${popup.canShow()}")
