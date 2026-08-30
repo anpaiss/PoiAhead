@@ -11,3 +11,4 @@ local.properties
 .DS_Store
 .claude/
 .gradle/
+logs_poiahead_*.log
