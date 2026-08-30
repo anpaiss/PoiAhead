@@ -99,7 +99,8 @@ class PopupController(
             textSize = 16f
             background = GradientDrawable().apply {
                 cornerRadius = dp(6f)
-                setColor(Color.parseColor("#555555"))
+                // Rosso: leggibile come "chiudi" a colpo d'occhio; bianco su #C62828 = 5.6:1
+                setColor(Color.parseColor("#C62828"))
             }
             setOnClickListener {
                 val p = currentPoi ?: return@setOnClickListener

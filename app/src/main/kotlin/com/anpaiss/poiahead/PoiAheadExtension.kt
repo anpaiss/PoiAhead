@@ -235,7 +235,7 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
             enabled = prefs.pageEnabled,
             hasData = true,
             status  = "No water nearby",
-            nearby  = nearby.take(4),
+            nearby  = nearby.take(10),
         )
         mapState.value = if (prefs.mapIconsEnabled) {
             nearby.takeWhile { it.distanceM <= MAP_RANGE_M }.take(MAP_MAX_POIS).map { it.poi }

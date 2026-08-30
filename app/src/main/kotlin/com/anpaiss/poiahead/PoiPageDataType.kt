@@ -35,9 +35,18 @@ class PoiPageDataType(
     private val pageState: StateFlow<PoiPageState>,
 ) : DataTypeImpl(extension, "poi-page") {
 
-    private val nameIds = listOf(R.id.tv_poi_name_1, R.id.tv_poi_name_2, R.id.tv_poi_name_3, R.id.tv_poi_name_4)
-    private val distIds = listOf(R.id.tv_poi_dist_1, R.id.tv_poi_dist_2, R.id.tv_poi_dist_3, R.id.tv_poi_dist_4)
-    private val rowIds  = listOf(R.id.row_poi_1, R.id.row_poi_2, R.id.row_poi_3, R.id.row_poi_4)
+    private val nameIds = listOf(
+        R.id.tv_poi_name_1, R.id.tv_poi_name_2, R.id.tv_poi_name_3, R.id.tv_poi_name_4, R.id.tv_poi_name_5,
+        R.id.tv_poi_name_6, R.id.tv_poi_name_7, R.id.tv_poi_name_8, R.id.tv_poi_name_9, R.id.tv_poi_name_10,
+    )
+    private val distIds = listOf(
+        R.id.tv_poi_dist_1, R.id.tv_poi_dist_2, R.id.tv_poi_dist_3, R.id.tv_poi_dist_4, R.id.tv_poi_dist_5,
+        R.id.tv_poi_dist_6, R.id.tv_poi_dist_7, R.id.tv_poi_dist_8, R.id.tv_poi_dist_9, R.id.tv_poi_dist_10,
+    )
+    private val rowIds  = listOf(
+        R.id.row_poi_1, R.id.row_poi_2, R.id.row_poi_3, R.id.row_poi_4, R.id.row_poi_5,
+        R.id.row_poi_6, R.id.row_poi_7, R.id.row_poi_8, R.id.row_poi_9, R.id.row_poi_10,
+    )
 
     override fun startStream(emitter: Emitter<StreamState>) {
         val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
