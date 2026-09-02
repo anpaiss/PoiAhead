@@ -18,11 +18,47 @@ All three surfaces can be toggled independently in the app settings.
 POIs (`amenity=drinking_water`) are fetched from the Overpass API along the
 corridor of the active route (or around your position when riding without a
 route) and cached locally for 30 days — so a previously visited area keeps
-working with no connectivity. The Karoo only has internet while tethered to the
-companion app; ride with the phone connected at least once per area.
+working with no connectivity. Ride with the phone paired at least once per area.
 
 Alert trigger: a POI ahead requiring a detour smaller than the configured
 threshold (50 / 100 / 200 m).
+
+Water POIs come from three sources: the OSM cache, the POIs the active route
+itself carries (the ones you placed on Komoot — they arrive with the Karoo's
+own distances along the route) and the water POIs saved on your Karoo account.
+Route and account POIs are already drawn by the Karoo, so only OSM ones go on
+our map layer.
+
+### "Ahead" is being switched from nearby to along-the-route — in the shadow
+
+Today an alert is decided on the straight-line distance from the rider plus
+the detour from the route polyline. That says nothing about whether a fountain
+is still to come or already passed, and on an out-and-back the same fountain
+is "close" on both legs. The replacement projects every POI onto the route
+(`RouteProjection`, one pass per stretch of route that comes near it, so a loop
+or an out-and-back yields one entry per pass) and takes the rider's position
+along the route from the Karoo (`routeDistance - DISTANCE_TO_DESTINATION`,
+invalid while off route or rejoining). "Next" is then simply the closest pass
+still ahead.
+
+This criterion runs **in the shadow**: it does not fire anything. Every tick
+its decision and reason are logged next to the real one in the sample CSV
+(`shadow_alert_id`, `shadow_reason`, `near_ahead_*`), and a `# shadow` marker
+records every case where it would have alerted and the real logic did not (or
+picked a different fountain). It is promoted only after at least 3 rides with a
+route show the Karoo position is reliable (present on ≥ 95 % of on-route ticks,
+no jumps > 500 m) and every real alert it classifies as *behind* the rider
+counts as a false positive of the current logic. Until then the popup and the
+page behave exactly as before. `eta_next_s` — the next fountain in seconds at
+the ride's average speed — is logged for the same reason and not shown yet.
+
+### Network
+
+Overpass is reached through the Karoo's own HTTP channel first (WiFi when
+connected, otherwise the companion app over BT — so a ride with the phone
+paired is enough to download an area), with plain HTTP as fallback. The SDK
+channel caps responses at 100 KB, so a query goes out as tiles of ~0.1° and
+the log (`FETCH`) says which channel answered and how many bytes.
 
 ## Display refresh
 

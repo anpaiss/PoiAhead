@@ -12,7 +12,12 @@ import java.io.File
  * fresca evita la query Overpass — così il giro funziona anche senza tethering,
  * purché la zona sia stata scaricata almeno una volta.
  */
-class PoiRepository(context: Context, private val logger: PoiAheadLogger) {
+class PoiRepository(
+    context: Context,
+    private val logger: PoiAheadLogger,
+    /** Tried in order; see [HttpTransport]. The activity has no SDK service, so direct only. */
+    private val transports: List<HttpTransport> = listOf(DirectTransport()),
+) {
 
     private data class Area(val s: Double, val w: Double, val n: Double, val e: Double, val ts: Long)
 
@@ -77,7 +82,7 @@ class PoiRepository(context: Context, private val logger: PoiAheadLogger) {
 
     private fun fetch(bbox: DoubleArray): Boolean {
         return try {
-            val fetched = OverpassClient.fetchDrinkingWater(bbox)
+            val fetched = OverpassClient.fetchDrinkingWater(bbox, transports) { logger.log("FETCH", it) }
             merge(bbox, fetched)
             logger.log("FETCH", "Overpass: ${fetched.size} POI per bbox " +
                 "%.3f,%.3f,%.3f,%.3f".format(bbox[0], bbox[1], bbox[2], bbox[3]))

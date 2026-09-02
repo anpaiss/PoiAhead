@@ -60,6 +60,16 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
     @Volatile private var rejoinActive = false
     @Volatile private var routePois: List<Symbol.POI> = emptyList()
 
+    // ── Shadow "ahead along the route" (phase 2/3): computed, logged, never acted on ──
+    @Volatile private var projRoute: RouteProjection.Route? = null
+    @Volatile private var projections: Map<String, List<RouteProjection.Hit>> = emptyMap()
+    @Volatile private var projectedKey = ""
+    @Volatile private var routePoiList: List<Poi> = emptyList()            // typed, from NavigatingRoute.pois
+    @Volatile private var routePoiAlong: Map<String, List<Double>> = emptyMap()  // the Karoo's own distancesAlongRoute
+    @Volatile private var accountPois: List<Poi> = emptyList()             // OnGlobalPOIs minus Home
+    @Volatile private var avgSpeedMs = -1.0
+    @Volatile private var lastShadowLogged: String? = null
+
     private val extensionScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val consumerIds = mutableListOf<String>()
     private var tickerJob: Job? = null
@@ -96,6 +106,9 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
         private const val MAP_RANGE_M         = 10_000.0
         private const val POS_SAVE_MIN_MOVE_M = 500.0
         private const val SNAPSHOT_TICKS      = 12       // log timeline ogni ~60s
+        // Corridor for the route projection: wider than any alert threshold so
+        // the data page can still show "off route" fountains with their detour.
+        private const val PROJECT_MAX_DETOUR_M = 500.0
     }
 
     override val types by lazy {
@@ -109,7 +122,9 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
         super.onCreate()
         logger = PoiAheadLogger(applicationContext)
         prefs  = Prefs(applicationContext)
-        repo   = PoiRepository(applicationContext, logger)
+        karooSystem = KarooSystemService(applicationContext)
+        // SDK channel first — it also works over the phone's BT link — direct HTTP as fallback.
+        repo   = PoiRepository(applicationContext, logger, listOf(SdkTransport(karooSystem), DirectTransport()))
         popup  = PopupController(applicationContext, logger, ::onNavigateTo, ::onDismissed)
         sampleLog = SampleLog(applicationContext)
         logger.log("SYS  ", "Sample log: ${sampleLog.path}")
@@ -124,7 +139,6 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
             prevHandler?.uncaughtException(thread, t)
         }
 
-        karooSystem = KarooSystemService(applicationContext)
         karooSystem.connect { connected ->
             logger.log("SYS  ", "Karoo connected=$connected")
         }
@@ -150,12 +164,16 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
                     routeTotalDistM = nav.routeDistance
                     rejoinActive    = nav.rejoinDistance != null || nav.rejoinPolyline != null
                     routePois       = nav.pois
+                    routePoiList    = nav.pois.map { toPoi(it, PoiSource.ROUTE) }
+                    routePoiAlong   = nav.pois.associate { "route-${it.id}" to it.distancesAlongRoute }
                 }
                 is OnNavigationState.NavigationState.NavigatingToDestination -> {
                     routeName       = nav.destination.name ?: "destination"
                     routeTotalDistM = -1.0
                     rejoinActive    = false
                     routePois       = emptyList()
+                    routePoiList    = emptyList()
+                    routePoiAlong   = emptyMap()
                 }
                 else -> Unit
             }
@@ -171,6 +189,8 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
             lastRoutePolyline = polyline
             val points = PolylineDecoder.decodeLatLng(polyline)
             routePoints = points
+            projRoute   = RouteProjection.Route(points)
+            projectedKey = ""   // projections are rebuilt on the next tick
             logger.log("ROUTE", "Route '$routeName': ${points.size} punti, ${routeTotalDistM.toInt()}m, " +
                 "${routePois.size} POI route" +
                 if (routePois.isEmpty()) "" else " (${routePois.map { it.type }.distinct().joinToString()})")
@@ -192,6 +212,11 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
         consumerIds += karooSystem.addConsumer(
             OnGlobalPOIs.Params, { _ -> }, {}
         ) { event: OnGlobalPOIs ->
+            val others = event.pois.filter { it.type != Symbol.POI.Types.HOME }
+            if (others.size != accountPois.size) {
+                logger.log("POI  ", "POI account: ${others.size} (${others.map { it.type }.distinct().joinToString()})")
+            }
+            accountPois = others.map { toPoi(it, PoiSource.ACCOUNT) }
             val home = event.pois.firstOrNull { it.type == Symbol.POI.Types.HOME }
             if (home != null) {
                 if (prefs.homeLocation?.first != home.lat) {
@@ -230,6 +255,16 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
                                     else "Pagina PoiAhead visibile")
             }
             visibleDataTypeIds.value = onPage
+        }
+
+        // ── Velocità media del giro: base della colonna eta_next_s (solo log) ──
+        consumerIds += karooSystem.addConsumer(
+            OnStreamState.StartStreaming(DataType.Type.AVERAGE_SPEED), { _ -> }, {}
+        ) { event: OnStreamState ->
+            (event.state as? StreamState.Streaming)?.dataPoint?.singleValue?.let {
+                if (avgSpeedMs < 0) logger.log("DIST ", "AVERAGE_SPEED: primo valore raw=$it (assunto m/s)")
+                avgSpeedMs = it
+            }
         }
 
         // ── Distanza giro (per il "quiet start": niente popup nei primi km) ───
@@ -296,7 +331,9 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
             ensureHomeCoverage()
         }
 
-        val all = repo.allPois()
+        // Water from every source: the OSM cache plus the route's own and the
+        // account's water POIs. Other types are carried for the log only.
+        val all = repo.allPois() + routePoiList.filter { it.isWater } + accountPois.filter { it.isWater }
         if (all.isEmpty()) {
             pageState.value = PoiPageState(enabled = prefs.pageEnabled,
                 status = "No POI data — ride with phone connected once")
@@ -314,15 +351,28 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
             status  = "No water nearby",
             nearby  = nearby.take(10),
         )
+        // Route and account POIs are already drawn by the Karoo: only OSM ones go on our layer.
         mapState.value = if (prefs.mapIconsEnabled) {
-            nearby.takeWhile { it.distanceM <= MAP_RANGE_M }.take(MAP_MAX_POIS).map { it.poi }
+            nearby.filter { it.poi.source == PoiSource.OSM }
+                .takeWhile { it.distanceM <= MAP_RANGE_M }.take(MAP_MAX_POIS).map { it.poi }
         } else emptyList()
 
         val decision = if (gpsPos != null) maybeAlert(nearby, now) else AlertDecision(null, "no gps fix")
 
+        // ── Shadow: what the along-route criterion would do (never acts) ──────
+        refreshProjections(all)
+        val routePosM    = karooRoutePositionM()
+        val aheadList    = routePosM?.let { RouteProjection.ahead(projections, it) } ?: emptyList()
+        val nearestAhead = aheadList.firstOrNull()
+        val shadow       = shadowDecision(aheadList, routePosM, now, decision)
+        val etaNextS     = if (nearestAhead != null && routePosM != null && avgSpeedMs > 0.5)
+            (nearestAhead.distanceFrom(routePosM) / avgSpeedMs).toLong() else null
+
         // One CSV row per tick while recording: what we saw, what we decided,
-        // and what the Karoo says about our place on the route.
-        if (rideActive) recordSample(now, gpsPos, pos, all.size, nearby, decision)
+        // what the along-route criterion would have decided, and what the
+        // Karoo says about our place on the route.
+        if (rideActive) recordSample(now, gpsPos, pos, all.size, nearby, decision,
+            routePosM, nearestAhead, shadow, etaNextS)
 
         // Snapshot periodico (1/min): timeline per l'analisi post-giro
         snapshotTickCounter++
@@ -413,6 +463,83 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
         return AlertDecision(candidate.poi.id, "fired")
     }
 
+    private fun toPoi(sym: Symbol.POI, source: PoiSource) = Poi(
+        id     = "${if (source == PoiSource.ROUTE) "route" else "acct"}-${sym.id}",
+        lat    = sym.lat,
+        lng    = sym.lng,
+        name   = sym.name,
+        type   = sym.type,
+        source = source,
+    )
+
+    /**
+     * Rebuilds the POI → passes map when the route or the POI set changed.
+     * Route POIs come with the Karoo's own distancesAlongRoute and skip the
+     * projection; for them only the detour is ours.
+     */
+    private fun refreshProjections(water: List<Poi>) {
+        val route = projRoute ?: run { projections = emptyMap(); projectedKey = ""; return }
+        val key = "${lastRoutePolyline.hashCode()}:${water.size}:${routePoiList.size}"
+        if (key == projectedKey) return
+        projectedKey = key
+        val map = HashMap(RouteProjection.projectAll(route, water.filter { it.source != PoiSource.ROUTE }, PROJECT_MAX_DETOUR_M))
+        for (rp in routePoiList) {
+            val along = routePoiAlong[rp.id]?.takeIf { it.isNotEmpty() } ?: continue
+            val detour = GeoUtils.distanceToPolylineM(rp.lat, rp.lng, routePoints)
+            map[rp.id] = along.map { RouteProjection.Hit(it, detour) }
+        }
+        projections = map
+        logger.log("PROJ ", "Proiezioni: ${map.size} POI entro ${PROJECT_MAX_DETOUR_M.toInt()}m dalla route, " +
+            "${map.values.sumOf { it.size }} passaggi (${routePoiList.size} POI route)")
+    }
+
+    /**
+     * Where the Karoo says we are along the route, or null when that cannot be
+     * trusted: no route, no distance yet, a rejoin in progress, or ON_ROUTE = 0.
+     * routegraph itself is inconsistent about ON_ROUTE (compares it with 1.0 in
+     * one place and 0.0 in another), so the CSV keeps the raw value to settle it.
+     */
+    private fun karooRoutePositionM(): Double? {
+        if (routeTotalDistM <= 0.0 || karooDistToDestM < 0.0 || rejoinActive) return null
+        if (karooOnRoute == 0.0) return null
+        return (routeTotalDistM - karooDistToDestM).coerceIn(0.0, routeTotalDistM)
+    }
+
+    /**
+     * What the along-route criterion would do this tick. Read-only: it never
+     * fires and never touches the cooldown or re-arm state; it reads them so
+     * the two decisions are comparable gate by gate. Reasons mirror maybeAlert.
+     */
+    private fun shadowDecision(
+        ahead: List<RouteProjection.Ahead>, routePosM: Double?, now: Long, real: AlertDecision,
+    ): AlertDecision {
+        if (routePosM == null) return AlertDecision(null, "no route pos")
+        val inRadius = ahead.filter { it.distanceFrom(routePosM) <= prefs.alertRadiusM }
+        if (inRadius.isEmpty()) return AlertDecision(null, "none ahead in radius")
+        if (!prefs.popupEnabled) return AlertDecision(null, "popup off")
+        if (!rideActive) return AlertDecision(null, "not recording")
+        val quietKm = prefs.quietStartKm
+        if (quietKm > 0 && rideDistanceM < quietKm * 1000.0) return AlertDecision(null, "quiet start")
+        if (now - lastAlertMs < COOLDOWN_MS) return AlertDecision(null, "cooldown")
+        var rejected = "rearm"
+        val pick = inRadius.firstOrNull { a ->
+            val last = alertedAt[a.poiId]
+            if (last != null && now - last < REARM_MS) return@firstOrNull false
+            (a.hit.detourM <= prefs.maxDetourM).also { if (!it) rejected = "detour" }
+        } ?: return AlertDecision(null, rejected)
+
+        // A shadow fire that differs from the real decision is the event the
+        // phase-2 verdict is built on: mark it, once per POI.
+        if (pick.poiId != real.poiId && lastShadowLogged != pick.poiId) {
+            lastShadowLogged = pick.poiId
+            val d = pick.distanceFrom(routePosM).toInt()
+            sampleLog.alert("shadow", pick.poiId, "along=${d}m detour=${pick.hit.detourM.toInt()}m real=${real.poiId ?: real.reason}")
+            logger.log("SHADW", "Lungo-route avrebbe avvisato POI ${pick.poiId} a ${d}m " +
+                "(dev ${pick.hit.detourM.toInt()}m); reale: ${real.poiId ?: real.reason}")
+        }
+        return AlertDecision(pick.poiId, "would fire")
+    }
+
     /**
      * One row of the structured sample log. Our straight-line picture sits next
      * to the Karoo's own along-route position, so the phase 2 switch can be
@@ -425,6 +552,10 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
         totalPois: Int,
         nearby: List<NearbyPoi>,
         decision: AlertDecision,
+        routePosM: Double?,
+        nearestAhead: RouteProjection.Ahead?,
+        shadow: AlertDecision,
+        etaNextS: Long?,
     ) {
         val nearest   = nearby.firstOrNull()
         val route     = routePoints
@@ -452,9 +583,14 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
                 nearAirDetourM = nearest?.takeIf { hasRoute }?.let {
                     GeoUtils.distanceToPolylineM(it.poi.lat, it.poi.lng, route)
                 },
-                alertId        = decision.poiId,
-                alertReason    = decision.reason,
-                // near_ahead_*, shadow_*, eta_next_s: filled from phase 2 onwards.
+                nearAheadId      = nearestAhead?.poiId,
+                nearAheadAlongM  = if (nearestAhead != null && routePosM != null) nearestAhead.distanceFrom(routePosM) else null,
+                nearAheadDetourM = nearestAhead?.hit?.detourM,
+                alertId          = decision.poiId,
+                alertReason      = decision.reason,
+                shadowAlertId    = shadow.poiId,
+                shadowReason     = shadow.reason,
+                etaNextS         = etaNextS,
             )
         )
     }

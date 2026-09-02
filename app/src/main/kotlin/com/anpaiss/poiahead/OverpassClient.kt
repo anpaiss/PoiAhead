@@ -2,45 +2,85 @@ package com.anpaiss.poiahead
 
 import org.json.JSONObject
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 import java.net.URLEncoder
+import kotlin.math.ceil
 
 /**
  * Client minimale per Overpass API: solo nodi amenity=drinking_water in un bbox.
- * Chiamare fuori dal main thread. Lancia IOException su errori di rete/HTTP.
+ * Chiamare fuori dal main thread. Lancia IOException se nessun transport riesce.
+ *
+ * Transports are tried in order. One with a response cap (the SDK channel, which
+ * can use the phone's BT link) gets the bbox as tiles small enough to stay
+ * under it; an unbounded one (direct WiFi) gets the whole bbox in one request.
  */
 object OverpassClient {
 
-    private const val ENDPOINT = "https://overpass-api.de/api/interpreter"
+    private const val ENDPOINT   = "https://overpass-api.de/api/interpreter"
     private const val TIMEOUT_MS = 25_000
 
-    /** bbox = (south, west, north, east). */
-    fun fetchDrinkingWater(bbox: DoubleArray): List<Poi> {
-        val (s, w, n, e) = listOf(bbox[0], bbox[1], bbox[2], bbox[3])
-        val query = "[out:json][timeout:25];" +
-            "node[\"amenity\"=\"drinking_water\"]($s,$w,$n,$e);out;"
+    /**
+     * Tile edge for capped transports, in degrees (~11 km N-S, ~8 km E-W at 45°).
+     * A drinking_water node is ~150 bytes of Overpass JSON: even the densest
+     * city (Rome, ~2 fountains/km²) stays around a third of the 100 KB cap.
+     */
+    internal const val TILE_DEG = 0.1
 
-        val conn = (URL(ENDPOINT).openConnection() as HttpURLConnection).apply {
-            requestMethod   = "POST"
-            connectTimeout  = TIMEOUT_MS
-            readTimeout     = TIMEOUT_MS
-            doOutput        = true
-            setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-            setRequestProperty("User-Agent", "PoiAhead/0.1 (Karoo extension)")
-        }
-        try {
-            conn.outputStream.use {
-                it.write("data=${URLEncoder.encode(query, "UTF-8")}".toByteArray())
+    /** bbox = (south, west, north, east). [log] receives one line per attempt. */
+    fun fetchDrinkingWater(
+        bbox: DoubleArray,
+        transports: List<HttpTransport>,
+        log: (String) -> Unit = {},
+    ): List<Poi> {
+        var last: IOException? = null
+        for (t in transports) {
+            try {
+                return if (t.maxResponseBytes == null) fetchWhole(bbox, t, log)
+                       else fetchTiled(bbox, t, log)
+            } catch (e: IOException) {
+                last = e
+                log("Overpass via ${t.name} fallita: ${e.message}")
             }
-            if (conn.responseCode != 200) {
-                throw IOException("Overpass HTTP ${conn.responseCode}")
-            }
-            val body = conn.inputStream.bufferedReader().readText()
-            return parse(body)
-        } finally {
-            conn.disconnect()
         }
+        throw last ?: IOException("no transport")
+    }
+
+    private fun fetchWhole(bbox: DoubleArray, t: HttpTransport, log: (String) -> Unit): List<Poi> {
+        val body = t.post(ENDPOINT, form(bbox), TIMEOUT_MS)
+        log("Overpass via ${t.name}: ${body.size} B per l'intero bbox")
+        return parse(String(body))
+    }
+
+    private fun fetchTiled(bbox: DoubleArray, t: HttpTransport, log: (String) -> Unit): List<Poi> {
+        val tiles = tiles(bbox)
+        val out = LinkedHashMap<String, Poi>()
+        var bytes = 0L
+        for (tile in tiles) {
+            val body = t.post(ENDPOINT, form(tile), TIMEOUT_MS)
+            bytes += body.size
+            parse(String(body)).forEach { out[it.id] = it }
+        }
+        log("Overpass via ${t.name}: ${tiles.size} tile, $bytes B, ${out.size} POI")
+        return out.values.toList()
+    }
+
+    /** Splits a bbox into tiles of at most [TILE_DEG] on each side. Pure, for tests. */
+    internal fun tiles(bbox: DoubleArray): List<DoubleArray> {
+        val (s, w, n, e) = listOf(bbox[0], bbox[1], bbox[2], bbox[3])
+        val rows = maxOf(1, ceil((n - s) / TILE_DEG).toInt())
+        val cols = maxOf(1, ceil((e - w) / TILE_DEG).toInt())
+        val dLat = (n - s) / rows
+        val dLng = (e - w) / cols
+        val out = ArrayList<DoubleArray>(rows * cols)
+        for (r in 0 until rows) for (c in 0 until cols) {
+            out.add(doubleArrayOf(s + r * dLat, w + c * dLng, s + (r + 1) * dLat, w + (c + 1) * dLng))
+        }
+        return out
+    }
+
+    private fun form(bbox: DoubleArray): String {
+        val query = "[out:json][timeout:25];" +
+            "node[\"amenity\"=\"drinking_water\"](${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]});out;"
+        return "data=" + URLEncoder.encode(query, "UTF-8")
     }
 
     private fun parse(json: String): List<Poi> {
