@@ -2,6 +2,7 @@ package com.anpaiss.poiahead
 
 import io.hammerhead.karooext.KarooSystemService
 import io.hammerhead.karooext.extension.KarooExtension
+import io.hammerhead.karooext.models.ActiveRidePage
 import io.hammerhead.karooext.internal.Emitter
 import io.hammerhead.karooext.models.DataType
 import io.hammerhead.karooext.models.HideSymbols
@@ -41,6 +42,23 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
     private lateinit var prefs: Prefs
     private lateinit var repo: PoiRepository
     private lateinit var popup: PopupController
+    private lateinit var sampleLog: SampleLog
+
+    // Full data type ids on the ride page the user is looking at. null = unknown,
+    // in which case the page keeps drawing (fail-open, see Extensions.whileVisible).
+    internal val visibleDataTypeIds = MutableStateFlow<Set<String>?>(null)
+    @Volatile private var lastVisibleOurs: Set<String>? = null
+
+    // ── Karoo native references: recorded only, never consumed yet ─────────
+    // routeDistance - DISTANCE_TO_DESTINATION is the Karoo's own position along
+    // the route. Phase 2 logs it next to our straight-line picture; the switch
+    // to an along-route "ahead" happens only once real rides show it holds up.
+    @Volatile private var karooDistToDestM = -1.0
+    @Volatile private var karooOnRoute: Double? = null
+    @Volatile private var routeTotalDistM = -1.0
+    @Volatile private var routeName = ""
+    @Volatile private var rejoinActive = false
+    @Volatile private var routePois: List<Symbol.POI> = emptyList()
 
     private val extensionScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val consumerIds = mutableListOf<String>()
@@ -81,8 +99,11 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
     }
 
     override val types by lazy {
-        listOf(PoiPageDataType(extension, pageState))
+        listOf(PoiPageDataType(extension, pageState, visibleDataTypeIds))
     }
+
+    /** What the alert logic decided this tick, and why — one word per reason for the CSV. */
+    private data class AlertDecision(val poiId: String?, val reason: String)
 
     override fun onCreate() {
         super.onCreate()
@@ -90,6 +111,8 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
         prefs  = Prefs(applicationContext)
         repo   = PoiRepository(applicationContext, logger)
         popup  = PopupController(applicationContext, logger, ::onNavigateTo, ::onDismissed)
+        sampleLog = SampleLog(applicationContext)
+        logger.log("SYS  ", "Sample log: ${sampleLog.path}")
 
         runCatching {
             val pi = packageManager.getPackageInfo(packageName, 0)
@@ -116,6 +139,26 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
                 lastNavStateName = navName
                 logger.log("ROUTE", "Stato navigazione: $navName")
             }
+            // Route metadata the Karoo already publishes. Logged, not consumed:
+            // the along-route position and the route POIs (which come with their
+            // own distancesAlongRoute) are the references phase 2 is judged on.
+            // Captured before the early returns: a rejoin update arrives with
+            // the same polyline and must still be seen.
+            when (nav) {
+                is OnNavigationState.NavigationState.NavigatingRoute -> {
+                    routeName       = nav.name
+                    routeTotalDistM = nav.routeDistance
+                    rejoinActive    = nav.rejoinDistance != null || nav.rejoinPolyline != null
+                    routePois       = nav.pois
+                }
+                is OnNavigationState.NavigationState.NavigatingToDestination -> {
+                    routeName       = nav.destination.name ?: "destination"
+                    routeTotalDistM = -1.0
+                    rejoinActive    = false
+                    routePois       = emptyList()
+                }
+                else -> Unit
+            }
             val polyline = when (nav) {
                 is OnNavigationState.NavigationState.NavigatingRoute -> nav.routePolyline.orEmpty()
                 is OnNavigationState.NavigationState.NavigatingToDestination -> nav.polyline.orEmpty()
@@ -128,7 +171,10 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
             lastRoutePolyline = polyline
             val points = PolylineDecoder.decodeLatLng(polyline)
             routePoints = points
-            logger.log("ROUTE", "Route: ${points.size} punti")
+            logger.log("ROUTE", "Route '$routeName': ${points.size} punti, ${routeTotalDistM.toInt()}m, " +
+                "${routePois.size} POI route" +
+                if (routePois.isEmpty()) "" else " (${routePois.map { it.type }.distinct().joinToString()})")
+            sampleLog.route(routeName, routeTotalDistM, routePois.size)
             val bbox = GeoUtils.bboxOf(points, ROUTE_MARGIN_M) ?: return@addConsumer
             prefs.currentRouteBbox = bbox  // per il pulsante di preload manuale
             extensionScope.launch { repo.ensureCovered(bbox) }
@@ -157,6 +203,35 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
             }
         }
 
+        // ── Distanza a destinazione + on-route nativi (solo log, fase 2.1) ────
+        consumerIds += karooSystem.addConsumer(
+            OnStreamState.StartStreaming(DataType.Type.DISTANCE_TO_DESTINATION), { _ -> }, {}
+        ) { event: OnStreamState ->
+            (event.state as? StreamState.Streaming)?.dataPoint?.values?.let { v ->
+                v[DataType.Field.DISTANCE_TO_DESTINATION]?.let {
+                    // Unit asserted by the docs, not verified: TIME_TO_DESTINATION
+                    // turned out to be milliseconds. First raw value goes to the log.
+                    if (karooDistToDestM < 0) logger.log("DIST ", "DISTANCE_TO_DESTINATION: primo valore raw=$it")
+                    karooDistToDestM = it
+                }
+                karooOnRoute = v[DataType.Field.ON_ROUTE]
+            }
+        }
+
+        // ── Pagina attiva: gate di visibilità per i redraw della pagina dati ──
+        consumerIds += karooSystem.addConsumer(
+            ActiveRidePage.Params, { _ -> }, {}
+        ) { event: ActiveRidePage ->
+            val onPage = event.page.elements.map { it.dataTypeId }.toSet()
+            val ours   = types.map { it.dataTypeId }.filter { it in onPage }.toSet()
+            if (ours != lastVisibleOurs) {
+                lastVisibleOurs = ours
+                logger.log("VIEW ", if (ours.isEmpty()) "Pagina PoiAhead non visibile — redraw sospesi"
+                                    else "Pagina PoiAhead visibile")
+            }
+            visibleDataTypeIds.value = onPage
+        }
+
         // ── Distanza giro (per il "quiet start": niente popup nei primi km) ───
         consumerIds += karooSystem.addConsumer(
             OnStreamState.StartStreaming(DataType.Type.DISTANCE), { _ -> }, {}
@@ -177,6 +252,7 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
             if (recording != rideActive) {
                 logger.log("RIDE ", if (recording) "Registrazione attiva — popup armati"
                                     else "Registrazione sospesa — popup in pausa")
+                sampleLog.ride(if (recording) "recording" else "paused")
             }
             rideActive = recording
         }
@@ -242,7 +318,11 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
             nearby.takeWhile { it.distanceM <= MAP_RANGE_M }.take(MAP_MAX_POIS).map { it.poi }
         } else emptyList()
 
-        if (gpsPos != null) maybeAlert(nearby, now)
+        val decision = if (gpsPos != null) maybeAlert(nearby, now) else AlertDecision(null, "no gps fix")
+
+        // One CSV row per tick while recording: what we saw, what we decided,
+        // and what the Karoo says about our place on the route.
+        if (rideActive) recordSample(now, gpsPos, pos, all.size, nearby, decision)
 
         // Snapshot periodico (1/min): timeline per l'analisi post-giro
         snapshotTickCounter++
@@ -263,22 +343,24 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
         }
     }
 
-    private fun maybeAlert(nearby: List<NearbyPoi>, now: Long) {
+    private fun maybeAlert(nearby: List<NearbyPoi>, now: Long): AlertDecision {
         val inRadius = nearby.takeWhile { it.distanceM <= prefs.alertRadiusM }
-        if (inRadius.isEmpty()) return
-        if (!prefs.popupEnabled) { logAlertSkip(inRadius.first().poi.id, "popup disattivati"); return }
-        if (!rideActive)        { logAlertSkip(inRadius.first().poi.id, "registrazione non attiva"); return }
+        if (inRadius.isEmpty()) return AlertDecision(null, "none in radius")
+        val firstId = inRadius.first().poi.id
+        if (!prefs.popupEnabled) { logAlertSkip(firstId, "popup disattivati"); return AlertDecision(null, "popup off") }
+        if (!rideActive)        { logAlertSkip(firstId, "registrazione non attiva"); return AlertDecision(null, "not recording") }
 
         // Quiet start: si parte con la borraccia piena — niente popup nei primi km.
         // Distanza sconosciuta (stream mai arrivato) = si tace, scelta conservativa.
         val quietKm = prefs.quietStartKm
         if (quietKm > 0 && rideDistanceM < quietKm * 1000.0) {
-            logAlertSkip(inRadius.first().poi.id, "quiet start (${quietKm}km)")
-            return
+            logAlertSkip(firstId, "quiet start (${quietKm}km)")
+            return AlertDecision(null, "quiet start")
         }
-        if (now - lastAlertMs < COOLDOWN_MS) return  // transitorio: niente log
+        if (now - lastAlertMs < COOLDOWN_MS) return AlertDecision(null, "cooldown")  // transitorio: niente log
 
         val route = routePoints
+        var rejected = "rearm"
         val candidate = inRadius.firstOrNull { np ->
             val lastAlert = alertedAt[np.poi.id]
             if (lastAlert != null && now - lastAlert < REARM_MS) return@firstOrNull false
@@ -287,18 +369,21 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
                 val detour = GeoUtils.distanceToPolylineM(np.poi.lat, np.poi.lng, route)
                 if (detour > prefs.maxDetourM) {
                     logAlertSkip(np.poi.id, "detour ${detour.toInt()}m > ${prefs.maxDetourM}m")
+                    rejected = "detour"
                     false
                 } else true
             } else {
                 // Senza route: solo POI a cui stiamo passando davvero accanto
-                np.distanceM <= prefs.maxDetourM
+                (np.distanceM <= prefs.maxDetourM).also { if (!it) rejected = "too far" }
             }
-        } ?: return
+        } ?: return AlertDecision(null, rejected)
 
         alertedAt[candidate.poi.id] = now
         lastAlertMs = now
         logger.log("ALERT", "POI ${candidate.poi.id} (${candidate.poi.name ?: "senza nome"}) " +
             "a ${candidate.distanceM.toInt()}m — popup=${popup.canShow()}")
+        sampleLog.alert("fired", candidate.poi.id,
+            "air=${candidate.distanceM.toInt()}m popup=${popup.canShow()} route=${route.size >= 2}")
 
         if (popup.canShow()) {
             popup.show(candidate.poi, candidate.distanceM)
@@ -325,6 +410,53 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
                 ))
             )
         }
+        return AlertDecision(candidate.poi.id, "fired")
+    }
+
+    /**
+     * One row of the structured sample log. Our straight-line picture sits next
+     * to the Karoo's own along-route position, so the phase 2 switch can be
+     * judged after a ride instead of argued.
+     */
+    private fun recordSample(
+        now: Long,
+        gpsPos: Pair<Double, Double>?,
+        pos: Pair<Double, Double>,
+        totalPois: Int,
+        nearby: List<NearbyPoi>,
+        decision: AlertDecision,
+    ) {
+        val nearest   = nearby.firstOrNull()
+        val route     = routePoints
+        val hasRoute  = route.size >= 2
+        val karooDist = karooDistToDestM.takeIf { it >= 0.0 }
+        sampleLog.record(
+            SampleLog.Row(
+                tMs            = now,
+                rideState      = if (rideActive) "Recording" else "Paused",
+                posSrc         = when {
+                    gpsPos != null                  -> "gps"
+                    prefs.lastKnownLocation != null -> "last"
+                    else                            -> "home"
+                },
+                lat            = pos.first,
+                lng            = pos.second,
+                routePosKarooM = if (routeTotalDistM > 0.0 && karooDist != null) routeTotalDistM - karooDist else null,
+                onRoute        = karooOnRoute,
+                rejoinActive   = if (hasRoute) rejoinActive else null,
+                routeLenM      = routeTotalDistM.takeIf { it > 0.0 },
+                nPois          = totalPois,
+                nRoutePois     = routePois.size,
+                nearAirId      = nearest?.poi?.id,
+                nearAirM       = nearest?.distanceM,
+                nearAirDetourM = nearest?.takeIf { hasRoute }?.let {
+                    GeoUtils.distanceToPolylineM(it.poi.lat, it.poi.lng, route)
+                },
+                alertId        = decision.poiId,
+                alertReason    = decision.reason,
+                // near_ahead_*, shadow_*, eta_next_s: filled from phase 2 onwards.
+            )
+        )
     }
 
     /** Copre l'area attorno al POI Home col raggio scelto. No-op se già in cache. */
@@ -388,6 +520,7 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
 
     override fun onDestroy() {
         logger.log("SYS  ", "=== PoiAhead fermato ===")
+        sampleLog.close()
         popup.hide()
         tickerJob?.cancel()
         extensionScope.cancel()

@@ -15,7 +15,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /** Stato pubblicato dall'extension verso la pagina dati. */
@@ -27,13 +30,29 @@ data class PoiPageState(
 )
 
 /**
- * Pagina dati full-page: fino a 4 fonti d'acqua vicine con distanza.
- * 4 righe e non 5: la fascia bassa può essere coperta dal banner "next cue".
+ * Pagina dati full-page: fino a 10 fonti d'acqua vicine con distanza.
+ *
+ * Redraws only when a displayed line actually changes, only while the page is
+ * the one on screen, and at most once per [REDRAW_THROTTLE_MS]. The engine
+ * publishes every 5 s and the distances change every metre, so without this
+ * the page redrew on every tick whether or not anything visible moved.
  */
 class PoiPageDataType(
     extension: String,
     private val pageState: StateFlow<PoiPageState>,
+    private val visibleDataTypeIds: StateFlow<Set<String>?> = MutableStateFlow(null),
 ) : DataTypeImpl(extension, "poi-page") {
+
+    companion object {
+        private const val REDRAW_THROTTLE_MS = 5_000L
+        private const val MAX_ROWS = 10
+    }
+
+    /** Exactly what ends up on screen; the redraw gate compares these. */
+    private data class PageView(
+        val status: String?,                 // non-null: show status, hide rows
+        val rows: List<Pair<String, String>>,
+    )
 
     private val nameIds = listOf(
         R.id.tv_poi_name_1, R.id.tv_poi_name_2, R.id.tv_poi_name_3, R.id.tv_poi_name_4, R.id.tv_poi_name_5,
@@ -43,7 +62,7 @@ class PoiPageDataType(
         R.id.tv_poi_dist_1, R.id.tv_poi_dist_2, R.id.tv_poi_dist_3, R.id.tv_poi_dist_4, R.id.tv_poi_dist_5,
         R.id.tv_poi_dist_6, R.id.tv_poi_dist_7, R.id.tv_poi_dist_8, R.id.tv_poi_dist_9, R.id.tv_poi_dist_10,
     )
-    private val rowIds  = listOf(
+    private val rowIds = listOf(
         R.id.row_poi_1, R.id.row_poi_2, R.id.row_poi_3, R.id.row_poi_4, R.id.row_poi_5,
         R.id.row_poi_6, R.id.row_poi_7, R.id.row_poi_8, R.id.row_poi_9, R.id.row_poi_10,
     )
@@ -51,53 +70,61 @@ class PoiPageDataType(
     override fun startStream(emitter: Emitter<StreamState>) {
         val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         scope.launch {
-            pageState.collect { state ->
-                emitter.onNext(
-                    StreamState.Streaming(
-                        DataPoint(dataTypeId, mapOf(DataType.Field.SINGLE to state.nearby.size.toDouble()))
+            pageState
+                .map { it.nearby.size.toDouble() }
+                .distinctUntilChanged()
+                .collect { count ->
+                    emitter.onNext(
+                        StreamState.Streaming(
+                            DataPoint(dataTypeId, mapOf(DataType.Field.SINGLE to count))
+                        )
                     )
-                )
-            }
+                }
         }
         emitter.setCancellable { scope.cancel() }
     }
 
     override fun startView(context: Context, config: ViewConfig, emitter: ViewEmitter) {
-        val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         scope.launch {
             emitter.onNext(UpdateGraphicConfig(showHeader = false))
-            pageState.collect { state ->
-                val views = RemoteViews(context.packageName, R.layout.view_poi_page)
-
-                when {
-                    !state.enabled -> {
+            pageState
+                .map { render(it) }
+                .distinctUntilChanged()
+                .whileVisible(visibleDataTypeIds, dataTypeId)
+                .throttle(REDRAW_THROTTLE_MS)
+                .collect { view ->
+                    val views = RemoteViews(context.packageName, R.layout.view_poi_page)
+                    if (view.status != null) {
                         views.setViewVisibility(R.id.tv_page_status, View.VISIBLE)
-                        views.setTextViewText(R.id.tv_page_status, "Disabled in settings")
+                        views.setTextViewText(R.id.tv_page_status, view.status)
                         rowIds.forEach { views.setViewVisibility(it, View.GONE) }
-                    }
-                    state.nearby.isEmpty() -> {
-                        views.setViewVisibility(R.id.tv_page_status, View.VISIBLE)
-                        views.setTextViewText(R.id.tv_page_status, state.status)
-                        rowIds.forEach { views.setViewVisibility(it, View.GONE) }
-                    }
-                    else -> {
+                    } else {
                         views.setViewVisibility(R.id.tv_page_status, View.GONE)
                         for (i in rowIds.indices) {
-                            val item = state.nearby.getOrNull(i)
-                            if (item == null) {
+                            val row = view.rows.getOrNull(i)
+                            if (row == null) {
                                 views.setViewVisibility(rowIds[i], View.GONE)
                             } else {
                                 views.setViewVisibility(rowIds[i], View.VISIBLE)
-                                views.setTextViewText(nameIds[i], item.poi.name ?: "Water fountain")
-                                views.setTextViewText(distIds[i], formatDistance(item.distanceM))
+                                views.setTextViewText(nameIds[i], row.first)
+                                views.setTextViewText(distIds[i], row.second)
                             }
                         }
                     }
+                    emitter.updateView(views)
                 }
-                emitter.updateView(views)
-            }
         }
         emitter.setCancellable { scope.cancel() }
+    }
+
+    private fun render(state: PoiPageState): PageView = when {
+        !state.enabled         -> PageView("Disabled in settings", emptyList())
+        state.nearby.isEmpty() -> PageView(state.status, emptyList())
+        else -> PageView(
+            null,
+            state.nearby.take(MAX_ROWS).map { (it.poi.name ?: "Water fountain") to formatDistance(it.distanceM) },
+        )
     }
 
     private fun formatDistance(m: Double): String =

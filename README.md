@@ -24,6 +24,34 @@ companion app; ride with the phone connected at least once per area.
 Alert trigger: a POI ahead requiring a detour smaller than the configured
 threshold (50 / 100 / 200 m).
 
+## Display refresh
+
+The engine recomputes every 5 s, but the data page redraws only when a displayed line actually changes and only while it is the ride page on screen (on e-ink every redraw costs battery and leaves ghosting). The visibility gate fails open: if the active page is unknown, the page draws — a gate that wrongly filtered it out would freeze it for a whole ride and fail silently.
+
+## Diagnostics
+
+Two logs on the device. The human-readable one (1 MB, one `.old` generation):
+
+```bash
+adb pull /sdcard/Android/data/com.anpaiss.poiahead/files/poi_ahead.log
+```
+
+Tags: `ROUTE`, `GPS`, `POI`, `DIST`, `RIDE`, `FETCH`, `CACHE`, `ALERT` (one "skip" line per POI and reason, so a popup that did not fire can be explained), `POPUP`, `NAV`, `VIEW`, `TICK` (one timeline line per minute).
+
+The structured one — one CSV row per 5 s tick while recording, 4 MB rotation:
+
+```bash
+adb pull /sdcard/Android/data/com.anpaiss.poiahead/files/poi_ahead_samples.csv
+```
+
+Each row carries our straight-line picture (nearest POI, its distance and detour, the alert decision and its reason) next to what the Karoo itself says about the ride: position along the route (`routeDistance - DISTANCE_TO_DESTINATION`), `ON_ROUTE`, rejoin state, and the number of POIs the route carries. Columns for values not produced yet (along-route candidate, shadow decision, ETA) are present and empty, so files recorded weeks apart stay comparable. `# ride`, `# route` and `# alert` marker lines separate rides and mark every popup. Numbers always use a dot as decimal separator, whatever the device locale.
+
+## Releases & CI
+
+Every push runs the unit tests and builds a debug APK (downloadable from the workflow run). Pushing a tag `vX.Y` builds a **signed** release APK and attaches it, with the Karoo extension manifest, to a GitHub release. **This repository is private, so the Karoo cannot fetch the manifest** (`MANIFEST_URL` gets a 404): installation stays manual via ADB. The wiring starts working by itself if the repository is ever made public.
+
+Secrets for signing: `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`. `karoo-ext` comes from GitHub Packages: the workflow uses `GITHUB_TOKEN` and falls back to a `GPR_TOKEN` secret (PAT with `read:packages`); locally `gpr.user` / `gpr.key` in `local.properties` or `~/.gradle/gradle.properties`.
+
 ## Install
 
 Sideload the APK (`adb install PoiAhead.apk`), open the app once to configure,

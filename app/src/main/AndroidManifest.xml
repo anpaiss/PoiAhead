@@ -14,6 +14,13 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
 
+        <!-- Where the Karoo fetches the extension manifest to offer installs and
+             updates from its library. Inert while the repository is private (404),
+             starts working by itself if it is ever made public. -->
+        <meta-data
+            android:name="io.hammerhead.karooext.MANIFEST_URL"
+            android:value="https://github.com/anpaiss/PoiAhead/releases/latest/download/manifest.json" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

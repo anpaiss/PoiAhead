@@ -120,6 +120,16 @@ class PoiRepository(context: Context, private val logger: PoiAheadLogger) {
 
     @Synchronized
     private fun save() {
+        // Areas are evicted FIFO but POIs never were, so the file grew without
+        // bound. A POI outside every retained area can no longer be served
+        // (isCovered would trigger a refetch there anyway), so drop it here.
+        val orphans = pois.values.filter { p ->
+            areas.none { a -> p.lat in a.s..a.n && p.lng in a.w..a.e }
+        }
+        if (orphans.isNotEmpty()) {
+            orphans.forEach { pois.remove(it.id) }
+            logger.log("CACHE", "Rimossi ${orphans.size} POI fuori da ogni area conservata (restano ${pois.size})")
+        }
         runCatching {
             val root = JSONObject()
             root.put("areas", JSONArray().apply {
