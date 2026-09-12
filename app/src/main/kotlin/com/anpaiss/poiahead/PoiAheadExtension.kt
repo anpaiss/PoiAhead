@@ -410,11 +410,16 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
         if (now - lastAlertMs < COOLDOWN_MS) return AlertDecision(null, "cooldown")  // transitorio: niente log
 
         val route = routePoints
+        // Fuori route (ON_ROUTE=0 o rientro in corso) la deviazione dalla polyline
+        // non dice nulla su dove siamo: giro 12/09, passati a 6–26 m da cinque
+        // fontane del paese, tutte scartate con "detour 179–863 m". Vale la
+        // regola senza route: conta solo la distanza in aria.
+        val offRoute = karooOnRoute == 0.0 || rejoinActive
         var rejected = "rearm"
         val candidate = inRadius.firstOrNull { np ->
             val lastAlert = alertedAt[np.poi.id]
             if (lastAlert != null && now - lastAlert < REARM_MS) return@firstOrNull false
-            if (route.size >= 2) {
+            if (route.size >= 2 && !offRoute) {
                 // Con route: POI vicino e con deviazione entro la soglia scelta
                 val detour = GeoUtils.distanceToPolylineM(np.poi.lat, np.poi.lng, route)
                 if (detour > prefs.maxDetourM) {
@@ -423,8 +428,10 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
                     false
                 } else true
             } else {
-                // Senza route: solo POI a cui stiamo passando davvero accanto
-                (np.distanceM <= prefs.maxDetourM).also { if (!it) rejected = "too far" }
+                // Senza route (o fuori route): solo POI a cui stiamo passando davvero accanto
+                (np.distanceM <= prefs.maxDetourM).also {
+                    if (!it) rejected = if (offRoute) "off-route too far" else "too far"
+                }
             }
         } ?: return AlertDecision(null, rejected)
 
