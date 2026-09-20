@@ -206,6 +206,7 @@ class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
                 logger.log("GPS  ", "Primo fix: %.5f, %.5f".format(event.lat, event.lng))
             }
             lastLocation = event.lat to event.lng
+            popup.onPosition(event.lat, event.lng)   // distanza viva nel popup a schermo
         }
 
         // ── POI account (Home): area di casa scaricata in automatico ──────────

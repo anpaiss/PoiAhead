@@ -8,6 +8,10 @@ Karoo extension that shows OpenStreetMap drinking water sources along your ride.
 
 - **Popup alerts** while riding: "Water fountain in 250 m" with NAVIGATE / DISMISS
   buttons. NAVIGATE opens the native Karoo pin screen to detour to the fountain.
+  The distance is live: it is recomputed at every GPS fix while the popup is on
+  screen (25 s — 170 m of road at 25 km/h), rounded to 10 m (5 m below 100 m) so
+  it stays readable, and once you are 20 m past the closest point reached it
+  turns amber and reads "60 m · moving away".
 - **Map icons**: water POIs rendered on the Karoo map (native water symbol).
 - **Data page**: full-page field listing the 4 nearest water sources with distance.
 

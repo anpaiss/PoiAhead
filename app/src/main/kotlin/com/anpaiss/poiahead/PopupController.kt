@@ -21,6 +21,10 @@ import android.widget.TextView
  * Tecnica overlay già provata sul k24 (AxsRatio + bottone AutoLoop beta2).
  * Posizionato in fascia alta: la fascia bassa è coperta dal banner "next cue".
  * Un solo popup alla volta; auto-dismiss dopo AUTO_DISMISS_MS.
+ *
+ * La riga della distanza è viva: [onPosition] la ricalcola a ogni fix GPS finché
+ * il popup è a schermo, e dice quando la fontana è ormai alle spalle
+ * (vedi [PopupDistance]).
  */
 class PopupController(
     private val context: Context,
@@ -33,10 +37,17 @@ class PopupController(
     private val handler = Handler(Looper.getMainLooper())
     private var windowManager: WindowManager? = null
     private var currentView: View? = null
-    private var currentPoi: Poi? = null
+    // Letto anche dal thread dei fix GPS (onPosition): scritto solo sul main
+    @Volatile private var currentPoi: Poi? = null
+    private var currentSubtitle: TextView? = null
+    private var minSeenM = Double.MAX_VALUE
+    private var lastLabel = ""
+    private var awayLogged = false
 
     companion object {
         private const val AUTO_DISMISS_MS = 25_000L
+        private const val COLOR_APPROACHING = "#90CAF9"   // azzurro chiaro su #1A1A1A = 10:1
+        private const val COLOR_AWAY        = "#FFB74D"   // ambra = 10:1: "l'hai passata", senza allarmare
     }
 
     fun canShow(): Boolean = Settings.canDrawOverlays(context)
@@ -50,6 +61,32 @@ class PopupController(
         handler.post { removeCurrent() }
     }
 
+    /**
+     * Nuovo fix GPS: aggiorna la distanza del popup a schermo. Senza popup costa
+     * una lettura volatile. Chiamabile da qualsiasi thread.
+     */
+    fun onPosition(lat: Double, lng: Double) {
+        val poi = currentPoi ?: return
+        val d = GeoUtils.haversineM(lat, lng, poi.lat, poi.lng)
+        handler.post { updateDistanceOnMain(poi, d) }
+    }
+
+    private fun updateDistanceOnMain(poi: Poi, distanceM: Double) {
+        val tv = currentSubtitle ?: return
+        if (currentPoi?.id != poi.id) return
+        if (distanceM < minSeenM) minSeenM = distanceM
+        val label = PopupDistance.label(distanceM, minSeenM)
+        if (label == lastLabel) return      // stessi metri arrotondati: niente ridisegno
+        lastLabel = label
+        tv.text = label
+        val away = PopupDistance.movingAway(distanceM, minSeenM)
+        tv.setTextColor(Color.parseColor(if (away) COLOR_AWAY else COLOR_APPROACHING))
+        if (away && !awayLogged) {
+            awayLogged = true
+            logger.log("POPUP", "POI ${poi.id} superato: minimo ${minSeenM.toInt()}m, ora ${distanceM.toInt()}m")
+        }
+    }
+
     private fun showOnMain(poi: Poi, distanceM: Double) {
         if (!canShow()) return
         removeCurrent()
@@ -57,7 +94,7 @@ class PopupController(
         val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         windowManager = wm
 
-        val dist = formatDistance(distanceM)
+        val dist = PopupDistance.format(distanceM)
         // Ombra sul testo chiaro per la leggibilità in pieno sole (lezione AxsRatio:
         // il popup sta sopra la mappa, come i tile)
         val title = TextView(context).apply {
@@ -70,8 +107,8 @@ class PopupController(
             setShadowLayer(dp(2f), 0f, dp(1f), 0xB3000000.toInt())
         }
         val subtitle = TextView(context).apply {
-            text = "in $dist"
-            setTextColor(Color.parseColor("#90CAF9"))
+            text = PopupDistance.label(distanceM, distanceM)
+            setTextColor(Color.parseColor(COLOR_APPROACHING))
             textSize = 18f
             gravity = Gravity.CENTER
             setShadowLayer(dp(2f), 0f, dp(1f), 0xB3000000.toInt())
@@ -148,8 +185,12 @@ class PopupController(
 
         runCatching { wm.addView(root, params) }
             .onSuccess {
-                currentView = root
-                currentPoi  = poi
+                currentView     = root
+                currentSubtitle = subtitle
+                minSeenM        = distanceM
+                lastLabel       = subtitle.text.toString()
+                awayLogged      = false
+                currentPoi      = poi
                 logger.log("POPUP", "Mostrato: POI ${poi.id} a ${dist}")
                 handler.postDelayed({ autoDismiss(poi) }, AUTO_DISMISS_MS)
             }
@@ -169,10 +210,8 @@ class PopupController(
         currentView?.let { v -> runCatching { windowManager?.removeView(v) } }
         currentView = null
         currentPoi  = null
+        currentSubtitle = null
     }
-
-    private fun formatDistance(m: Double): String =
-        if (m < 1000) "${m.toInt()} m" else "%.1f km".format(m / 1000.0)
 
     private fun dp(v: Float): Float = v * context.resources.displayMetrics.density
 }
