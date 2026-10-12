@@ -76,9 +76,13 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: gradle :app:assembleRelease --no-daemon
 
+      - name: Fixed asset name for releases/latest/download
+        if: github.ref_type == 'tag'
+        run: cp app/build/outputs/apk/release/app-release.apk PoiAhead.apk
+
       - name: GitHub release
         if: github.ref_type == 'tag'
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "app/build/outputs/apk/release/app-release.apk,app/manifest.json"
+          artifacts: "PoiAhead.apk,app/manifest.json"
           generateReleaseNotes: true

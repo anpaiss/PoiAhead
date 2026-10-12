@@ -3,6 +3,8 @@ package com.anpaiss.poiahead
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.view.View
 import android.widget.Button
@@ -19,6 +21,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var prefs: Prefs
     private val logger by lazy { PoiAheadLogger(applicationContext) }
     private val repo   by lazy { PoiRepository(applicationContext, logger) }
+    private val testPopup by lazy { PopupController(applicationContext, logger, {}, { _, _ -> }) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -109,6 +112,12 @@ class MainActivity : AppCompatActivity() {
             }
             checkHomeArea()  // raggio più ampio → può servire un nuovo download
         }
+        // Sample popup after 3 s: time to go back to the ride screen and see it
+        // where it will really appear. Also the quickest check of the overlay permission.
+        findViewById<Button>(R.id.btn_test_popup).setOnClickListener {
+            if (!Settings.canDrawOverlays(this)) { refreshOverlayUi(); return@setOnClickListener }
+            Handler(Looper.getMainLooper()).postDelayed({ testPopup.show(SAMPLE_POI, 250.0) }, 3_000L)
+        }
         findViewById<Button>(R.id.btn_preload_route).setOnClickListener {
             val bbox = prefs.currentRouteBbox
             if (bbox == null) {
@@ -180,6 +189,10 @@ class MainActivity : AppCompatActivity() {
         refreshOverlayUi()
         refreshStatus()
         checkHomeArea()
+    }
+
+    private companion object {
+        val SAMPLE_POI = Poi(id = "sample", lat = 0.0, lng = 0.0, name = "Fontana di piazza")
     }
 
     private fun refreshOverlayUi() {

@@ -8,9 +8,9 @@ plugins {
 // Release identity comes from CI: the tag gives the version name, the run
 // number the version code. A local build keeps fixed values.
 val releaseVersion: String =
-    System.getenv("RELEASE_VERSION")?.removePrefix("v")?.takeIf { it.isNotBlank() } ?: "0.1.0"
+    System.getenv("RELEASE_VERSION")?.removePrefix("v")?.takeIf { it.isNotBlank() } ?: "1.0"
 val buildNumber: Int = System.getenv("BUILD_NUMBER")?.toIntOrNull() ?: 0
-val appVersionCode: Int = if (buildNumber > 0) 100 + buildNumber else 1
+val appVersionCode: Int = if (buildNumber > 0) 100 + buildNumber else 100
 
 // The keystore travels as a base64 secret and is decoded next to the module,
 // outside build/ so `clean` cannot remove it mid-build. *.keystore is ignored.
@@ -27,6 +27,10 @@ android {
         targetSdk     = 34
         versionCode   = appVersionCode
         versionName   = releaseVersion
+    }
+
+    buildFeatures {
+        buildConfig = true   // BuildConfig.VERSION_NAME for the KarooExtension version
     }
 
     if (keystoreBase64 != null) {
@@ -52,15 +56,15 @@ android {
 }
 
 // Karoo extension manifest: the JSON the Karoo fetches from MANIFEST_URL (see
-// AndroidManifest.xml). Inert while the repository is private, but a tagged
-// CI release publishes it next to the APK so nothing changes if it goes public.
-// Schema: io.hammerhead.karooext.models.KarooAppManifest.
+// AndroidManifest.xml). Published next to the APK with every release; the APK
+// is uploaded under the fixed name PoiAhead.apk so releases/latest/download
+// works. Schema: io.hammerhead.karooext.models.KarooAppManifest.
 val generateManifest by tasks.registering {
     val out  = layout.projectDirectory.file("manifest.json")
     val repo = "https://github.com/anpaiss/PoiAhead"
     val version = releaseVersion
     val code = appVersionCode
-    val notes = System.getenv("RELEASE_NOTES").orEmpty()
+    val notes = System.getenv("RELEASE_NOTES").orEmpty().ifBlank { "See the GitHub release." }
     // Declared as inputs so a change of version/notes (they come from the
     // environment) re-runs the task; with outputs alone Gradle would keep a
     // stale manifest.json as up-to-date.
@@ -75,13 +79,19 @@ val generateManifest by tasks.registering {
             {
               "label": "PoiAhead",
               "packageName": "com.anpaiss.poiahead",
-              "latestApkUrl": ${q("$repo/releases/download/v$version/app-release.apk")},
+              "iconUrl": ${q("https://raw.githubusercontent.com/anpaiss/PoiAhead/master/docs/icon.png")},
+              "latestApkUrl": ${q("$repo/releases/latest/download/PoiAhead.apk")},
               "latestVersion": ${q(version)},
               "latestVersionCode": $code,
               "developer": "Andrea Paissan",
-              "description": ${q("Drinking water sources from OpenStreetMap along your ride: popup alerts with one-tap navigation, map icons and a data page of the fountains ahead.")},
+              "description": ${q("Drinking water fountains from OpenStreetMap along your ride. A popup tells you when a fountain is coming up and takes you there with one tap; a data page lists the fountains around you with their distance.")},
               "releaseNotes": ${q(notes)},
-              "tags": ["performance"]
+              "screenshotUrls": [
+                ${q("https://raw.githubusercontent.com/anpaiss/PoiAhead/master/docs/popup.png")},
+                ${q("https://raw.githubusercontent.com/anpaiss/PoiAhead/master/docs/page.png")},
+                ${q("https://raw.githubusercontent.com/anpaiss/PoiAhead/master/docs/app.png")}
+              ],
+              "tags": ["navigation"]
             }
             """.trimIndent()
         )

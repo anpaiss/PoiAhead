@@ -18,6 +18,7 @@
     <string name="settings_overlay_needed">Popup alerts need the overlay permission.</string>
     <string name="settings_grant_overlay">GRANT OVERLAY PERMISSION</string>
     <string name="settings_status_title">STATUS</string>
+    <string name="settings_test_popup">TEST POPUP (shows in 3 s)</string>
 
     <!-- Offline data -->
     <string name="settings_preload">OFFLINE DATA</string>

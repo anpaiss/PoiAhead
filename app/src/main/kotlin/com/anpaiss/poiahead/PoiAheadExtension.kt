@@ -35,7 +35,7 @@ import kotlinx.coroutines.launch
  *  - icone Symbol.POI (Types.WATER) sulla mappa
  *  - pagina dati full-page con le 4 fonti più vicine
  */
-class PoiAheadExtension : KarooExtension("poi-ahead", "0.1.0") {
+class PoiAheadExtension : KarooExtension("poi-ahead", BuildConfig.VERSION_NAME) {
 
     private lateinit var karooSystem: KarooSystemService
     private lateinit var logger: PoiAheadLogger
