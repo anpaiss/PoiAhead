@@ -19,3 +19,7 @@ app/manifest.json
 
 # Note di sessione, fuori dal repository come negli altri progetti
 HANDOVER.md
+
+# Bozze post Reddit e immagini, non tracciate (come in BigFields)
+reddit_post*.md
+/reddit_images
