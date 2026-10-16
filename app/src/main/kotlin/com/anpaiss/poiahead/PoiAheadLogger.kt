@@ -20,6 +20,9 @@ class PoiAheadLogger(context: Context) {
     private var writeFailLogged = false
 
     companion object {
+        /** Logger dell'estensione, per i receiver (manifest) che vivono nello stesso processo. */
+        @Volatile var shared: PoiAheadLogger? = null
+
         private const val MAX_SIZE_BYTES = 1024 * 1024L  // 1 MB
         private const val LOGCAT_TAG     = "PoiAhead"
     }

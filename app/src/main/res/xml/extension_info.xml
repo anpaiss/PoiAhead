@@ -13,4 +13,12 @@
         graphical="true"
         icon="@drawable/ic_launcher" />
 
+    <!-- Campo Switches (libreria KarooSwitches): tap = popup con gli interruttori di tutte le estensioni -->
+    <DataType
+        typeId="switches"
+        displayName="@string/switches_name"
+        description="@string/switches_desc"
+        graphical="true"
+        icon="@drawable/ic_launcher" />
+
 </ExtensionInfo>

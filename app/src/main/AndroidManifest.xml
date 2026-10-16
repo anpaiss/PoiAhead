@@ -44,5 +44,19 @@
                 android:resource="@xml/extension_info" />
         </service>
 
+        <!-- Interruttore "Water alerts" per il popup Switches (libreria KarooSwitches):
+             esportato, protetto dal permesso a firma, cosi' solo le nostre estensioni lo vedono -->
+        <receiver
+            android:name=".WaterAlertsSwitch"
+            android:exported="true"
+            android:permission="com.anpaiss.karooswitches.CONTROL">
+            <intent-filter>
+                <action android:name="com.anpaiss.karooswitches.SWITCH" />
+            </intent-filter>
+            <meta-data
+                android:name="com.anpaiss.karooswitches.label"
+                android:value="Water alerts" />
+        </receiver>
+
     </application>
 </manifest>

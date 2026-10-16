@@ -1,5 +1,8 @@
 package com.anpaiss.poiahead
 
+import android.content.SharedPreferences
+import com.anpaiss.karooswitches.Switches
+import com.anpaiss.karooswitches.SwitchesDataType
 import io.hammerhead.karooext.KarooSystemService
 import io.hammerhead.karooext.extension.KarooExtension
 import io.hammerhead.karooext.models.ActiveRidePage
@@ -40,6 +43,12 @@ class PoiAheadExtension : KarooExtension("poi-ahead", BuildConfig.VERSION_NAME) 
     private lateinit var karooSystem: KarooSystemService
     private lateinit var logger: PoiAheadLogger
     private lateinit var prefs: Prefs
+
+    // Il campo Switches si ridisegna quando i popup vengono accesi/spenti dall'app
+    // (SharedPreferences tiene i listener con riferimento debole: va tenuto qui)
+    private val popupPrefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == Prefs.KEY_POPUP) Switches.notifyChanged()
+    }
     private lateinit var repo: PoiRepository
     private lateinit var popup: PopupController
     private lateinit var sampleLog: SampleLog
@@ -112,7 +121,7 @@ class PoiAheadExtension : KarooExtension("poi-ahead", BuildConfig.VERSION_NAME) 
     }
 
     override val types by lazy {
-        listOf(PoiPageDataType(extension, pageState, visibleDataTypeIds))
+        listOf(PoiPageDataType(extension, pageState, visibleDataTypeIds), SwitchesDataType(extension))
     }
 
     /** What the alert logic decided this tick, and why — one word per reason for the CSV. */
@@ -122,6 +131,8 @@ class PoiAheadExtension : KarooExtension("poi-ahead", BuildConfig.VERSION_NAME) 
         super.onCreate()
         logger = PoiAheadLogger(applicationContext)
         prefs  = Prefs(applicationContext)
+        PoiAheadLogger.shared = logger
+        prefs.sp.registerOnSharedPreferenceChangeListener(popupPrefListener)
         karooSystem = KarooSystemService(applicationContext)
         // SDK channel first — it also works over the phone's BT link — direct HTTP as fallback.
         repo   = PoiRepository(applicationContext, logger, listOf(SdkTransport(karooSystem), DirectTransport()))
