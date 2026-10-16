@@ -78,8 +78,11 @@ object OverpassClient {
     }
 
     private fun form(bbox: DoubleArray): String {
+        // drinking_water!=no: a tap mapped as drinking water but later marked not
+        // potable (dried up, "acqua non potabile" sign) must not raise an alert.
         val query = "[out:json][timeout:25];" +
-            "node[\"amenity\"=\"drinking_water\"](${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]});out;"
+            "node[\"amenity\"=\"drinking_water\"][\"drinking_water\"!=\"no\"]" +
+            "(${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]});out;"
         return "data=" + URLEncoder.encode(query, "UTF-8")
     }
 
