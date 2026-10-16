@@ -647,10 +647,14 @@ class PoiAheadExtension : KarooExtension("poi-ahead", BuildConfig.VERSION_NAME) 
 
     // ── Layer icone sulla mappa ──────────────────────────────────────────────
     override fun startMap(emitter: Emitter<MapEffect>) {
+        // Logged because nobody has seen the symbols on a Karoo 3 map yet: this tells
+        // whether the Karoo asks for the layer at all and what we hand it.
+        logger.log("MAP", "Layer mappa richiesto dal Karoo")
         val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
         var shownIds = emptySet<String>()
         scope.launch {
             mapState.collect { pois ->
+                logger.log("MAP", "ShowSymbols: ${pois.size} fontane OSM entro ${MAP_RANGE_M.toInt() / 1000} km")
                 val symbols = pois.map { p ->
                     Symbol.POI(
                         id   = "poi-ahead-${p.id}",

@@ -17,7 +17,7 @@ For now PoiAhead shows water only. The same machinery could later show other poi
 
 **The data page** is a full-page field, *Water Ahead*, listing the ten fountains closest to you with their distance. It is worth a page mainly on very long rides, to see what is coming and get ready for the refills; on an ordinary ride the popup alone does the job.
 
-**Map icons**: the fountains from OpenStreetMap are also offered to the Karoo map as water symbols. On the Karoo 3 they have not been seen to appear yet, so consider this experimental; the fountains that the route itself carries are drawn by the Karoo anyway.
+**Map icons**: the fountains from OpenStreetMap (the 50 closest within 10 km) are drawn on the Karoo map as water symbols, the same pin the Karoo uses for the water points of a route; the fountains that the route itself carries are drawn by the Karoo anyway. Together with the popup off, this is the "show me, don't tell me" mode.
 
 Each of the three can be switched off in the app.
 
@@ -27,7 +27,7 @@ Each of the three can be switched off in the app.
 
 - The fountain is within the **alert distance** (200, 400 or 800 m, default 400).
 - With a route loaded and you on it, the fountain is within the **max detour** from the route line (50, 100 or 200 m, default 100). Without a route, or off route, the straight-line distance from you must be within the max detour instead: only fountains you are really passing by.
-- Only while the ride is recording, and not during the **quiet start** (the first 2, 5 or 10 km, default 5: you leave with full bottles).
+- Only while the ride is recording, and not during the **quiet start** (the first 2, 5, 10, 20, 30 or 40 km, default 5: you leave with full bottles, and where fountains are everywhere you may only want to hear about them late in the ride).
 - One popup every two minutes at most; the same fountain can alert again after 30 minutes, so on an out-and-back it is still there on the way home.
 
 Distances are straight-line. A fountain just behind you is as "close" as one ahead; the along-the-route version is being measured on real rides (see the technical notes) and will replace it when the numbers hold up.
@@ -75,7 +75,6 @@ It is not on the Hammerhead app store, but once installed it appears in the Karo
 
 - Distances are straight-line, in the popup and on the page; a fountain behind you can still alert.
 - Many fountains have no name in OpenStreetMap and show as *Water fountain*.
-- Map icons from the extension have not been seen on the Karoo 3 map yet.
 - The cache needs a connection once per area; without it the page says so and nothing alerts.
 
 ## Feedback

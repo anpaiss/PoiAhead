@@ -82,21 +82,26 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val rgQuiet = findViewById<RadioGroup>(R.id.rg_quiet_start)
-        when (prefs.quietStartKm) {
-            0    -> rgQuiet.check(R.id.rb_quiet_off)
-            2    -> rgQuiet.check(R.id.rb_quiet_2)
-            10   -> rgQuiet.check(R.id.rb_quiet_10)
-            else -> rgQuiet.check(R.id.rb_quiet_5)
+        // Two rows of radio buttons for one choice (seven options do not fit one row):
+        // checking in one row clears the other.
+        val rgQuiet  = findViewById<RadioGroup>(R.id.rg_quiet_start)
+        val rgQuiet2 = findViewById<RadioGroup>(R.id.rg_quiet_start_2)
+        val quietIds = mapOf(
+            0 to R.id.rb_quiet_off, 2 to R.id.rb_quiet_2, 5 to R.id.rb_quiet_5, 10 to R.id.rb_quiet_10,
+            20 to R.id.rb_quiet_20, 30 to R.id.rb_quiet_30, 40 to R.id.rb_quiet_40,
+        )
+        val quietKm = prefs.quietStartKm.takeIf { it in quietIds } ?: 5
+        (if (quietKm >= 20) rgQuiet2 else rgQuiet).check(quietIds.getValue(quietKm))
+        var quietSyncing = false
+        fun bindQuiet(row: RadioGroup, other: RadioGroup) = row.setOnCheckedChangeListener { _, id ->
+            if (id == -1 || quietSyncing) return@setOnCheckedChangeListener
+            quietSyncing = true
+            other.clearCheck()
+            quietSyncing = false
+            prefs.quietStartKm = quietIds.entries.first { it.value == id }.key
         }
-        rgQuiet.setOnCheckedChangeListener { _, id ->
-            prefs.quietStartKm = when (id) {
-                R.id.rb_quiet_off -> 0
-                R.id.rb_quiet_2   -> 2
-                R.id.rb_quiet_10  -> 10
-                else              -> 5
-            }
-        }
+        bindQuiet(rgQuiet, rgQuiet2)
+        bindQuiet(rgQuiet2, rgQuiet)
 
         val rgRadius = findViewById<RadioGroup>(R.id.rg_preload_radius)
         when (prefs.preloadRadiusKm) {

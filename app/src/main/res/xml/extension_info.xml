@@ -3,6 +3,7 @@
     displayName="@string/extension_name"
     icon="@drawable/ic_launcher"
     id="poi-ahead"
+    mapLayer="true"
     scansDevices="false">
 
     <!-- Pagina POI — lista fonti acqua vicine con distanza -->

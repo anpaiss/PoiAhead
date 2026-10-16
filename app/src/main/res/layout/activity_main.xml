@@ -185,6 +185,39 @@
                 android:text="10 km"
                 android:textColor="#FFFFFF" />
         </RadioGroup>
+        <!-- second row of the same choice: a RadioGroup only excludes its own children,
+             MainActivity keeps the two rows mutually exclusive -->
+        <RadioGroup
+            android:id="@+id/rg_quiet_start_2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <RadioButton
+                android:id="@+id/rb_quiet_20"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="20 km"
+                android:textColor="#FFFFFF" />
+            <RadioButton
+                android:id="@+id/rb_quiet_30"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="30 km"
+                android:textColor="#FFFFFF" />
+            <RadioButton
+                android:id="@+id/rb_quiet_40"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="40 km"
+                android:textColor="#FFFFFF" />
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+        </RadioGroup>
 
         <TextView
             android:layout_width="match_parent"
