@@ -1,5 +1,6 @@
 package com.anpaiss.poiahead
 
+import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
 import java.net.URLEncoder
@@ -86,8 +87,13 @@ object OverpassClient {
         return "data=" + URLEncoder.encode(query, "UTF-8")
     }
 
+    /** @throws IOException on a 200 with a non-JSON body (HTML error page), so the next transport is tried. */
     private fun parse(json: String): List<Poi> {
-        val elements = JSONObject(json).optJSONArray("elements") ?: return emptyList()
+        val elements = try {
+            JSONObject(json).optJSONArray("elements") ?: return emptyList()
+        } catch (e: JSONException) {
+            throw IOException("risposta non JSON: ${e.message}", e)
+        }
         val result = ArrayList<Poi>(elements.length())
         for (i in 0 until elements.length()) {
             val el = elements.getJSONObject(i)

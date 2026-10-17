@@ -12,16 +12,22 @@ import java.io.File
  * fresca evita la query Overpass — così il giro funziona anche senza tethering,
  * purché la zona sia stata scaricata almeno una volta.
  */
-class PoiRepository(
-    context: Context,
-    private val logger: PoiAheadLogger,
+class PoiRepository internal constructor(
+    /** The cache file itself: the app passes its filesDir one, tests a temp file. */
+    private val file: File,
+    private val logger: PoiAheadLogger?,
     /** Tried in order; see [HttpTransport]. The activity has no SDK service, so direct only. */
-    private val transports: List<HttpTransport> = listOf(DirectTransport()),
+    private val transports: List<HttpTransport>,
 ) {
+
+    constructor(
+        context: Context,
+        logger: PoiAheadLogger,
+        transports: List<HttpTransport> = listOf(DirectTransport()),
+    ) : this(File(context.filesDir, "poi_cache.json"), logger, transports)
 
     private data class Area(val s: Double, val w: Double, val n: Double, val e: Double, val ts: Long)
 
-    private val file  = File(context.filesDir, "poi_cache.json")
     private val pois  = LinkedHashMap<String, Poi>()   // id → poi
     private val areas = mutableListOf<Area>()
     private var loadedStamp = 0L  // lastModified del file al momento del load/save
@@ -33,7 +39,7 @@ class PoiRepository(
 
     init {
         load()
-        logger.log("CACHE", "Cache: ${pois.size} POI, ${areas.size} aree coperte")
+        logger?.log("CACHE", "Cache: ${pois.size} POI, ${areas.size} aree coperte")
     }
 
     @Synchronized
@@ -44,7 +50,7 @@ class PoiRepository(
             pois.clear()
             areas.clear()
             load()
-            logger.log("CACHE", "Cache ricaricata da disco: ${pois.size} POI, ${areas.size} aree")
+            logger?.log("CACHE", "Cache ricaricata da disco: ${pois.size} POI, ${areas.size} aree")
         }
         return pois.values.toList()
     }
@@ -82,13 +88,13 @@ class PoiRepository(
 
     private fun fetch(bbox: DoubleArray): Boolean {
         return try {
-            val fetched = OverpassClient.fetchDrinkingWater(bbox, transports) { logger.log("FETCH", it) }
+            val fetched = OverpassClient.fetchDrinkingWater(bbox, transports) { logger?.log("FETCH", it) }
             merge(bbox, fetched)
-            logger.log("FETCH", "Overpass: ${fetched.size} POI per bbox " +
+            logger?.log("FETCH", "Overpass: ${fetched.size} POI per bbox " +
                 "%.3f,%.3f,%.3f,%.3f".format(bbox[0], bbox[1], bbox[2], bbox[3]))
             true
         } catch (e: Exception) {
-            logger.log("FETCH", "Overpass fallita (${e.message}) — si usa la cache (${pois.size} POI)")
+            logger?.log("FETCH", "Overpass fallita (${e.message}) — si usa la cache (${pois.size} POI)")
             false
         }
     }
@@ -120,7 +126,7 @@ class PoiRepository(
                 pois[poi.id] = poi
             }
             loadedStamp = file.lastModified()
-        }.onFailure { logger.logError("CACHE", "Cache illeggibile — si riparte vuoti", it) }
+        }.onFailure { logger?.logError("CACHE", "Cache illeggibile — si riparte vuoti", it) }
     }
 
     @Synchronized
@@ -133,7 +139,7 @@ class PoiRepository(
         }
         if (orphans.isNotEmpty()) {
             orphans.forEach { pois.remove(it.id) }
-            logger.log("CACHE", "Rimossi ${orphans.size} POI fuori da ogni area conservata (restano ${pois.size})")
+            logger?.log("CACHE", "Rimossi ${orphans.size} POI fuori da ogni area conservata (restano ${pois.size})")
         }
         runCatching {
             val root = JSONObject()
@@ -149,8 +155,12 @@ class PoiRepository(
                         .put("lng", p.lng).put("name", p.name ?: ""))
                 }
             })
-            file.writeText(root.toString())
+            // Atomic: the other instance (app or extension) may read while we write, and a
+            // half-written file would load as "cache illeggibile" there.
+            val tmp = File(file.parent, file.name + ".tmp")
+            tmp.writeText(root.toString())
+            if (!tmp.renameTo(file)) { file.writeText(root.toString()); tmp.delete() }
             loadedStamp = file.lastModified()
-        }.onFailure { logger.logError("CACHE", "Salvataggio cache fallito", it) }
+        }.onFailure { logger?.logError("CACHE", "Salvataggio cache fallito", it) }
     }
 }

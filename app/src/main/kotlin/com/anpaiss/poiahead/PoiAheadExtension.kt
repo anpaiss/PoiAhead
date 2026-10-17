@@ -683,6 +683,7 @@ class PoiAheadExtension : KarooExtension("poi-ahead", BuildConfig.VERSION_NAME) 
         popup.hide()
         tickerJob?.cancel()
         extensionScope.cancel()
+        prefs.sp.unregisterOnSharedPreferenceChangeListener(popupPrefListener)
         consumerIds.forEach { karooSystem.removeConsumer(it) }
         consumerIds.clear()
         karooSystem.disconnect()

@@ -111,4 +111,6 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
 
     testImplementation(libs.junit)
+    // Real org.json for JVM tests: the android.jar one is a stub
+    testImplementation("org.json:json:20240303")
 }
