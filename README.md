@@ -1,4 +1,4 @@
-![Total Downloads](https://img.shields.io/github/downloads/anpaiss/PoiAhead/total?color=blue)
+![Total Downloads](https://img.shields.io/github/downloads/anpaiss/PoiAhead/PoiAhead.apk?color=blue)
 ![Latest Release](https://img.shields.io/github/v/release/anpaiss/PoiAhead)
 
 # PoiAhead
