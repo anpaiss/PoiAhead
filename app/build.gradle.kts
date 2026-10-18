@@ -105,7 +105,7 @@ kotlin {
 
 dependencies {
     implementation(libs.hammerhead.karoo.ext)
-    implementation("com.github.anpaiss:KarooSwitches:0.2.0")
+    implementation("com.github.anpaiss:karooswitches:0.2.0")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.kotlinx.coroutines.android)

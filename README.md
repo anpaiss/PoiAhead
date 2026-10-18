@@ -5,7 +5,7 @@
 
 # PoiAhead
 
-> **Version 1.0** — install the APK from the [latest release](../../releases/latest/download/PoiAhead.apk).
+> **Version 1.1** — install the APK from the [latest release](../../releases/latest/download/PoiAhead.apk).
 
 Drinking-water fountains from OpenStreetMap along your ride, on the Hammerhead Karoo. A popup tells you when a fountain is coming up and takes you there with one tap.
 
@@ -21,9 +21,33 @@ For now PoiAhead shows water only. The same machinery could later show other poi
 
 **Map icons**: the fountains from OpenStreetMap (the 50 closest within 10 km) are drawn on the Karoo map as water symbols, the same pin the Karoo uses for the water points of a route; the fountains that the route itself carries are drawn by the Karoo anyway. Together with the popup off, this is the "show me, don't tell me" mode.
 
-Each of the three can be switched off in the app.
+Each of the three can be switched off in the app, and the popup alerts also from the ride screen, through the **Switches** field (see below).
 
 ![The Water Ahead data page](docs/page.png)
+
+## What's new in 1.1
+
+- **Switches data field.** A field for your ride pages that shows whether the water alerts are ON or OFF; a tap opens a popup over the ride screen to flip them without leaving the page or touching the app. The popup is shared with the other extensions by the same author (Auto Loop, BetterETA): their switches appear in it as you install them, no extra APK. See [Switches field](#switches-field).
+- **Switches popup, second generation**: a row can also be a time with its own switch, like BetterETA's mandatory arrival time (ON/OFF plus −15 / −5 / +5 / +15); the Water alerts row stays a plain ON/OFF button.
+- **Map icons finally drawn**: the water symbols on the Karoo map were declared but never requested by the Karoo (`mapLayer` missing in the extension manifest).
+- **Quiet start up to 40 km** (2, 5, 10, 20, 30, 40).
+- **Taps marked not potable** (`drinking_water=no`) are skipped.
+- **Fixes from the October code review**: the POI cache is written atomically (no half-written file read by the other process), a non-JSON Overpass answer (HTML error page) falls through to the next transport instead of giving up, the preferences listener is unregistered when the extension stops; six new unit tests on the repository.
+
+## Switches field
+
+Add the **Switches** data field (under PoiAhead) to any ride page. It shows **POIAHEAD** with ON or OFF underneath, and a tap opens a popup over the ride screen with one row per switch of every installed extension that supports it: **Water alerts** here, **Auto Loop** in [Auto Loop Karoo](https://github.com/anpaiss/AutoLoopKaroo), more as they come. Tap a button to flip the switch, CLOSE or wait 20 seconds to dismiss; touches outside the popup still reach the ride screen. It needs the overlay permission PoiAhead already asks for.
+
+A row can also be a time with its own switch, when an extension exposes one — BetterETA's mandatory arrival time here, ON with its −15 / −5 / +5 / +15 buttons on the left, OFF on the right:
+
+<table>
+  <tr>
+    <td><img width="240" alt="Switches popup: a time row ON above the Auto Loop and Water alerts switches" src="docs/switches_on.png" /></td>
+    <td><img width="240" alt="Switches popup: the time row OFF, Auto Loop and Water alerts left" src="docs/switches_off.png" /></td>
+  </tr>
+</table>
+
+Each extension ships the same field through the shared [KarooSwitches](https://github.com/anpaiss/KarooSwitches) library, so whichever one you install first already gives you the popup.
 
 ## When the popup fires
 
