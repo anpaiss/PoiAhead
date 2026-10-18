@@ -13,10 +13,18 @@ import kotlin.math.ceil
  * Transports are tried in order. One with a response cap (the SDK channel, which
  * can use the phone's BT link) gets the bbox as tiles small enough to stay
  * under it; an unbounded one (direct WiFi) gets the whole bbox in one request.
+ * For each transport the public Overpass servers are tried in turn: the main
+ * one answers 502/504 or hangs at busy hours (12/10 and 18/10/2026), the
+ * mirrors usually do not fail at the same time.
  */
 object OverpassClient {
 
-    private const val ENDPOINT   = "https://overpass-api.de/api/interpreter"
+    internal val ENDPOINTS = listOf(
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.osm.ch/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+        "https://overpass.private.coffee/api/interpreter",
+    )
     private const val TIMEOUT_MS = 25_000
 
     /**
@@ -33,30 +41,31 @@ object OverpassClient {
         log: (String) -> Unit = {},
     ): List<Poi> {
         var last: IOException? = null
-        for (t in transports) {
+        for (t in transports) for (endpoint in ENDPOINTS) {
+            val host = endpoint.removePrefix("https://").substringBefore('/')
             try {
-                return if (t.maxResponseBytes == null) fetchWhole(bbox, t, log)
-                       else fetchTiled(bbox, t, log)
+                return if (t.maxResponseBytes == null) fetchWhole(bbox, t, endpoint, log)
+                       else fetchTiled(bbox, t, endpoint, log)
             } catch (e: IOException) {
                 last = e
-                log("Overpass via ${t.name} fallita: ${e.message}")
+                log("Overpass via ${t.name} @$host fallita: ${e.message}")
             }
         }
         throw last ?: IOException("no transport")
     }
 
-    private fun fetchWhole(bbox: DoubleArray, t: HttpTransport, log: (String) -> Unit): List<Poi> {
-        val body = t.post(ENDPOINT, form(bbox), TIMEOUT_MS)
-        log("Overpass via ${t.name}: ${body.size} B per l'intero bbox")
+    private fun fetchWhole(bbox: DoubleArray, t: HttpTransport, endpoint: String, log: (String) -> Unit): List<Poi> {
+        val body = t.post(endpoint, form(bbox), TIMEOUT_MS)
+        log("Overpass via ${t.name} @${endpoint.removePrefix("https://").substringBefore('/')}: ${body.size} B per l'intero bbox")
         return parse(String(body))
     }
 
-    private fun fetchTiled(bbox: DoubleArray, t: HttpTransport, log: (String) -> Unit): List<Poi> {
+    private fun fetchTiled(bbox: DoubleArray, t: HttpTransport, endpoint: String, log: (String) -> Unit): List<Poi> {
         val tiles = tiles(bbox)
         val out = LinkedHashMap<String, Poi>()
         var bytes = 0L
         for (tile in tiles) {
-            val body = t.post(ENDPOINT, form(tile), TIMEOUT_MS)
+            val body = t.post(endpoint, form(tile), TIMEOUT_MS)
             bytes += body.size
             parse(String(body)).forEach { out[it.id] = it }
         }

@@ -12,6 +12,7 @@ import android.widget.CheckBox
 import android.widget.RadioGroup
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import io.hammerhead.karooext.KarooSystemService
 import org.json.JSONObject
 import java.io.File
 
@@ -20,7 +21,12 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var prefs: Prefs
     private val logger by lazy { PoiAheadLogger(applicationContext) }
-    private val repo   by lazy { PoiRepository(applicationContext, logger) }
+    // The manual download and the Home-area check run from here: with the direct
+    // transport alone they failed on a Karoo linked to the phone over Bluetooth
+    // (issue #1, 17/10/2026: "Download failed" with a working connection). The SDK
+    // channel is tried first, like in the extension.
+    private val karoo  by lazy { KarooSystemService(applicationContext).also { it.connect { } } }
+    private val repo   by lazy { PoiRepository(applicationContext, logger, listOf(SdkTransport(karoo), DirectTransport())) }
     private val testPopup by lazy { PopupController(applicationContext, logger, {}, { _, _ -> }) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -150,15 +156,26 @@ class MainActivity : AppCompatActivity() {
             val ok    = bbox != null && repo.ensureCovered(bbox)
             val count = repo.allPois().size
             logger.log("FETCH", "Preload manuale ($what) ok=$ok — $count POI in cache")
+            val reason = failureReason(repo.lastError)
             runOnUiThread {
                 btnRoute.isEnabled = true
                 showPreloadResult(
                     if (ok) getString(R.string.preload_done, count)
-                    else getString(R.string.preload_failed)
+                    else getString(R.string.preload_failed, reason)
                 )
                 refreshStatus()
             }
         }.start()
+    }
+
+    /** The last error of the repository, in words: no link at all, or the Overpass servers. */
+    private fun failureReason(err: String?): String = when {
+        err == null -> getString(R.string.preload_reason_unknown)
+        err.contains("resolve host") || err.contains("timeout") || err.contains("no response") ||
+            err.contains("Network is unreachable") || err.contains("ENETUNREACH") || err.contains("ECONNREFUSED") ->
+            getString(R.string.preload_reason_offline, err)
+        err.startsWith("HTTP") -> getString(R.string.preload_reason_server, err)
+        else -> err
     }
 
     /**
@@ -187,6 +204,11 @@ class MainActivity : AppCompatActivity() {
                 refreshStatus()
             }
         }.start()
+    }
+
+    override fun onDestroy() {
+        karoo.disconnect()
+        super.onDestroy()
     }
 
     override fun onResume() {

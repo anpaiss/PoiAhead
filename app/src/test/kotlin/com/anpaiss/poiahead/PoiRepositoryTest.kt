@@ -20,6 +20,7 @@ class PoiRepositoryTest {
         var calls = 0
         override fun post(url: String, formBody: String, timeoutMs: Int): ByteArray {
             calls++
+            if (!bodies.hasNext()) throw IOException("fake: nothing left for $url")
             return bodies.next().toByteArray()
         }
     }
@@ -76,12 +77,29 @@ class PoiRepositoryTest {
     }
 
     @Test
-    fun `a non-JSON body is an IOException so the next transport is tried`() {
+    fun `a non-JSON body is an IOException so the next server and transport are tried`() {
         val html = FakeTransport(listOf("<html>Too many requests</html>").iterator())
         val good = FakeTransport(listOf(overpass(7L to null)).iterator())
         val pois = OverpassClient.fetchDrinkingWater(bboxA, listOf(html, good))
         assertEquals(listOf("7"), pois.map { it.id })
+        assertEquals(OverpassClient.ENDPOINTS.size, html.calls)   // every server of the first transport
         assertEquals(1, good.calls)
+    }
+
+    @Test
+    fun `the second server answers when the first is down`() {
+        val servers = ArrayList<String>()
+        val t = object : HttpTransport {
+            override val name = "fake"
+            override val maxResponseBytes: Int? = null
+            override fun post(url: String, formBody: String, timeoutMs: Int): ByteArray {
+                servers += url
+                if (url == OverpassClient.ENDPOINTS[0]) throw IOException("HTTP 504")
+                return overpass(9L to null).toByteArray()
+            }
+        }
+        assertEquals(listOf("9"), OverpassClient.fetchDrinkingWater(bboxA, listOf(t)).map { it.id })
+        assertEquals(OverpassClient.ENDPOINTS.take(2), servers)
     }
 
     @Test(expected = IOException::class)

@@ -86,14 +86,20 @@ class PoiRepository internal constructor(
         }
     }
 
+    /** Why the last fetch failed (the last transport/server error), null after a success. Shown by the app screen. */
+    @Volatile var lastError: String? = null
+        private set
+
     private fun fetch(bbox: DoubleArray): Boolean {
         return try {
             val fetched = OverpassClient.fetchDrinkingWater(bbox, transports) { logger?.log("FETCH", it) }
             merge(bbox, fetched)
+            lastError = null
             logger?.log("FETCH", "Overpass: ${fetched.size} POI per bbox " +
                 "%.3f,%.3f,%.3f,%.3f".format(bbox[0], bbox[1], bbox[2], bbox[3]))
             true
         } catch (e: Exception) {
+            lastError = e.message ?: e.javaClass.simpleName
             logger?.log("FETCH", "Overpass fallita (${e.message}) — si usa la cache (${pois.size} POI)")
             false
         }

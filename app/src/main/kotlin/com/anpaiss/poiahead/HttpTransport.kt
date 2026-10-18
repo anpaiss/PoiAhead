@@ -26,7 +26,10 @@ interface HttpTransport {
     fun post(url: String, formBody: String, timeoutMs: Int): ByteArray
 }
 
-private const val USER_AGENT = "PoiAhead/0.1 (Karoo extension)"
+// overpass-api.de answers 406 Not Acceptable to generic agents (okhttp/…, Dalvik/…,
+// curl/…, Mozilla/…; probed 18/10/2026) and its usage policy asks for a contact:
+// an identifying agent with the project URL, the version from BuildConfig.
+private val USER_AGENT = "PoiAhead/${BuildConfig.VERSION_NAME} (Hammerhead Karoo extension; +https://github.com/anpaiss/PoiAhead)"
 
 /** Plain HttpURLConnection: works only when the Karoo itself has connectivity. */
 class DirectTransport : HttpTransport {
