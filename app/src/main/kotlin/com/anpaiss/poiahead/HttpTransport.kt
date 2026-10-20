@@ -94,6 +94,7 @@ class SdkTransport(private val karoo: KarooSystemService) : HttpTransport {
             }
         }
         try {
+            // The Karoo's channel reports its own "timeout" after about 30 s (seen 20/10/2026); this is the safety net.
             if (!done.await(timeoutMs.toLong(), TimeUnit.MILLISECONDS)) throw IOException("sdk: timeout")
         } finally {
             karoo.removeConsumer(id)

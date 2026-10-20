@@ -146,6 +146,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * The manual download always fetches again, covered or not: the rider pressed
+     * the button because the area looks wrong or empty (an Austrian route cached
+     * with no fountain from a Switzerland-only server, 20/10/2026).
+     */
     private fun runPreload(what: String, bboxProvider: () -> DoubleArray?) {
         val btnRoute = findViewById<Button>(R.id.btn_preload_route)
         btnRoute.isEnabled = false
@@ -153,14 +158,14 @@ class MainActivity : AppCompatActivity() {
 
         Thread {
             val bbox  = bboxProvider()
-            val ok    = bbox != null && repo.ensureCovered(bbox)
+            val ok    = bbox != null && repo.refresh(bbox)
             val count = repo.allPois().size
-            logger.log("FETCH", "Preload manuale ($what) ok=$ok — $count POI in cache")
-            val reason = failureReason(repo.lastError)
+            logger.log("FETCH", "Preload manuale ($what) ok=$ok — ${repo.lastFetched} POI per la rotta, $count in cache")
+            val reason = failureReason(repo.lastFailure)
             runOnUiThread {
                 btnRoute.isEnabled = true
                 showPreloadResult(
-                    if (ok) getString(R.string.preload_done, count)
+                    if (ok) getString(R.string.preload_done, repo.lastFetched, count)
                     else getString(R.string.preload_failed, reason)
                 )
                 refreshStatus()
@@ -168,14 +173,11 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    /** The last error of the repository, in words: no link at all, or the Overpass servers. */
-    private fun failureReason(err: String?): String = when {
-        err == null -> getString(R.string.preload_reason_unknown)
-        err.contains("resolve host") || err.contains("timeout") || err.contains("no response") ||
-            err.contains("Network is unreachable") || err.contains("ENETUNREACH") || err.contains("ECONNREFUSED") ->
-            getString(R.string.preload_reason_offline, err)
-        err.startsWith("HTTP") -> getString(R.string.preload_reason_server, err)
-        else -> err
+    /** The last failure in words: no link at all (and why that happens on the Karoo), or one line per Overpass server. */
+    private fun failureReason(f: OverpassFailure?): String = when {
+        f == null -> getString(R.string.preload_reason_unknown)
+        f.offline -> getString(R.string.preload_reason_offline, f.lines())
+        else -> getString(R.string.preload_reason_server, f.lines())
     }
 
     /**

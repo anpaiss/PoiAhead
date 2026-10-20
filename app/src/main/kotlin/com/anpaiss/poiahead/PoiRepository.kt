@@ -86,20 +86,46 @@ class PoiRepository internal constructor(
         }
     }
 
-    /** Why the last fetch failed (the last transport/server error), null after a success. Shown by the app screen. */
-    @Volatile var lastError: String? = null
+    /**
+     * Downloads the bbox again even when it is covered: the manual button, so a
+     * wrong or empty fill (a server with partial coverage, 20/10/2026) can be
+     * replaced without waiting 30 days. Same single-fetch lock as [ensureCovered].
+     */
+    fun refresh(bbox: DoubleArray): Boolean {
+        synchronized(this) {
+            if (fetchInFlight) return isCovered(bbox)
+            fetchInFlight = true
+        }
+        try {
+            return fetch(bbox)
+        } finally {
+            fetchInFlight = false
+        }
+    }
+
+    /** Why the last fetch failed, one reason per server; null after a success. Shown by the app screen. */
+    @Volatile var lastFailure: OverpassFailure? = null
+        private set
+
+    /** How many POIs the last successful fetch returned for its bbox (not the cache total). */
+    @Volatile var lastFetched: Int = 0
         private set
 
     private fun fetch(bbox: DoubleArray): Boolean {
         return try {
             val fetched = OverpassClient.fetchDrinkingWater(bbox, transports) { logger?.log("FETCH", it) }
             merge(bbox, fetched)
-            lastError = null
+            lastFailure = null
+            lastFetched = fetched.size
             logger?.log("FETCH", "Overpass: ${fetched.size} POI per bbox " +
                 "%.3f,%.3f,%.3f,%.3f".format(bbox[0], bbox[1], bbox[2], bbox[3]))
             true
+        } catch (e: OverpassFailure) {
+            lastFailure = e
+            logger?.log("FETCH", "Overpass fallita (${e.message}) — si usa la cache (${pois.size} POI)")
+            false
         } catch (e: Exception) {
-            lastError = e.message ?: e.javaClass.simpleName
+            lastFailure = OverpassFailure(mapOf("?" to (e.message ?: e.javaClass.simpleName)))
             logger?.log("FETCH", "Overpass fallita (${e.message}) — si usa la cache (${pois.size} POI)")
             false
         }

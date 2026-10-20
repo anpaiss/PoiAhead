@@ -29,10 +29,10 @@
     <string name="settings_preload_route_button">DOWNLOAD POIS FOR CURRENT ROUTE</string>
     <string name="preload_no_route">No active route — start navigation first.</string>
     <string name="preload_running">Downloading…</string>
-    <string name="preload_done">Done — water POIs cached: %1$d</string>
+    <string name="preload_done">Done — %1$d water POIs in the route area (%2$d cached in all)</string>
     <string name="preload_failed">Download failed — %1$s</string>
-    <string name="preload_reason_offline">no connection: the Karoo needs its Wi‑Fi or the phone link through the companion app (%1$s).</string>
-    <string name="preload_reason_server">the Overpass servers are busy (%1$s), try again in a few minutes.</string>
+    <string name="preload_reason_offline">no connection. On the ride screen the Karoo switches its Wi‑Fi off: open this app from the home screen, or link the phone through the companion app.\n%1$s</string>
+    <string name="preload_reason_server">no Overpass server answered, try again in a few minutes.\n%1$s</string>
     <string name="preload_reason_unknown">check the connection.</string>
     <string name="home_area_ok">Home area (%1$d km): downloaded ✓</string>
     <string name="home_area_pending">Home area (%1$d km): not downloaded yet — needs a connection</string>

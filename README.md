@@ -5,7 +5,7 @@
 
 # PoiAhead
 
-> **Version 1.1** — install the APK from the [latest release](../../releases/latest/download/PoiAhead.apk).
+> **Version 1.2** — install the APK from the [latest release](../../releases/latest/download/PoiAhead.apk).
 
 Drinking-water fountains from OpenStreetMap along your ride, on the Hammerhead Karoo. A popup tells you when a fountain is coming up and takes you there with one tap.
 
@@ -24,6 +24,13 @@ For now PoiAhead shows water only. The same machinery could later show other poi
 Each of the three can be switched off in the app, and the popup alerts also from the ride screen, through the **Switches** field (see below).
 
 ![The Water Ahead data page](docs/page.png)
+
+## What's new in 1.2
+
+- **Overpass servers that really answer.** 1.1 fell back to overpass.osm.ch, which covers Switzerland only and answers an empty, successful result everywhere else: when the main server was busy, a route elsewhere was cached as "no fountain" for 30 days. The list is now the FOSSGIS front end plus its two machines reached directly (lz4 and z) and overpass.private.coffee as last resort, all worldwide (checked with the same query in Italy, Austria, the US east and west coast, London and Sydney: identical counts); kumi.systems is gone (dead), maps.mail.ru is worldwide too but the Karoo does not trust its certificate. The wait per server is 60 s on the Karoo's Wi‑Fi, since the healthy ones take 25-40 s at busy hours (the Karoo's own channel over the phone link gives up after 30 s on its own).
+- **Download POIs for current route downloads again** even when the area is already cached, and the result says how many fountains the route area has, not the cache total.
+- **The failure says which server did what**, one line per server: `overpass-api.de: HTTP 502, server busy`, `z.overpass-api.de: no answer in 60 s`, and "no network" when the Karoo has no link at all.
+- **Download from the home screen.** On the ride screen the Karoo switches its Wi‑Fi off, so a download started from there finds no network: open the app from the home screen, or use the phone link.
 
 ## What's new in 1.1
 
@@ -62,7 +69,7 @@ Distances are straight-line. A fountain just behind you is as "close" as one ahe
 
 ## Where the fountains come from
 
-- **OpenStreetMap**, nodes tagged `amenity=drinking_water`, fetched from the Overpass API and cached on the device for 30 days. Three areas are covered: a radius around the **Home** POI of your Karoo account (10, 25 or 50 km, default 25), downloaded on its own as soon as there is a connection; a 1 km corridor around the route when you load one; 5 km around your position, checked every 10 minutes while riding. For a trip far from home, load the route and press **Download POIs for current route** before leaving.
+- **OpenStreetMap**, nodes tagged `amenity=drinking_water`, fetched from the Overpass API and cached on the device for 30 days. Three areas are covered: a radius around the **Home** POI of your Karoo account (10, 25 or 50 km, default 25), downloaded on its own as soon as there is a connection; a 1 km corridor around the route when you load one; 5 km around your position, checked every 10 minutes while riding. For a trip far from home, load the route, go back to the home screen and press **Download POIs for current route** in the app before leaving (on the ride screen the Karoo switches its Wi‑Fi off).
 - **The route's own POIs** (the water points you placed on Komoot, for example) and the water POIs saved on your Karoo account. They are already drawn on the map by the Karoo; PoiAhead only adds them to the popup and to the page.
 
 The network is used for the Overpass download only: the Karoo's Wi‑Fi, or the phone through the companion app, which is enough to cover a new area during a ride. Nothing else leaves the device.
@@ -94,7 +101,7 @@ It is not on the Hammerhead app store, but once installed it appears in the Karo
 - **Popup.** An Android overlay window (`TYPE_APPLICATION_OVERLAY`, not focusable: touches outside it go to the ride app) in the upper part of the screen, since the Karoo draws its turn banner over the bottom. Without the overlay permission the alert falls back to the Karoo's native in-ride alert, informative only, no NAVIGATE.
 - **Data page.** The engine recomputes every 5 s, but the page redraws only when a displayed line changes and only while it is the page on screen (on e-ink every redraw costs battery and leaves ghosting). If the active page is unknown the page draws anyway: a gate that filtered it out by mistake would freeze it for a whole ride and fail silently.
 - **Ahead along the route, in the shadow.** Every fountain is projected onto the route (one entry per pass, so an out-and-back yields two) and the rider's position along the route comes from the Karoo (`routeDistance − DISTANCE_TO_DESTINATION`, invalid while off route or rejoining). This criterion runs on every tick but fires nothing: its decision is logged next to the real one, and it is promoted only after enough rides with a route show that the Karoo position is reliable and that the alerts it classifies as *behind* were indeed false positives.
-- **Network.** Overpass is reached through the Karoo's own HTTP channel first (Wi‑Fi, or the companion app over Bluetooth), plain HTTP as fallback — from the extension and, since 1.1, from the app screen too. The SDK channel caps responses at 100 KB, so an area is fetched as tiles of about 0.1°. Overpass is a public, shared service: four servers are tried in turn (overpass-api.de, overpass.osm.ch, overpass.kumi.systems, overpass.private.coffee); a `502`/`504` or a hang from one of them is normal at busy hours, and if all four fail the cache fills on the next try. The `FETCH` lines of the log name the transport and the server of every attempt.
+- **Network.** Overpass is reached through the Karoo's own HTTP channel first (Wi‑Fi, or the companion app over Bluetooth), plain HTTP as fallback — from the extension and, since 1.1, from the app screen too. The SDK channel caps responses at 100 KB, so an area is fetched as tiles of about 0.1°. Overpass is a public, shared service: four worldwide servers are tried in turn (overpass-api.de, lz4.overpass-api.de, z.overpass-api.de, overpass.private.coffee); a `502`/`504` or a hang from one of them is normal at busy hours, and if all four fail the cache fills on the next try. Regional servers (overpass.osm.ch) are not used: they answer an empty result outside their area. The `FETCH` lines of the log name the transport and the server of every attempt.
 - **Logs.** `Android/data/com.anpaiss.poiahead/files/poi_ahead.log` (1 MB, one `.old` generation): version, route, GPS, downloads, every alert decision with its reason, popups. Next to it `poi_ahead_samples.csv`, one row per 5 s tick while recording (4 MB rotation): what PoiAhead saw and decided, what the along-route criterion would have decided, and what the Karoo says about the position on the route. Numbers always use a dot as decimal separator.
 - **Tested on** a Karoo 3 (Android 12, 480 × 800 px). The Karoo 2 is supported by the SDK but untested.
 - **Build.** Every push runs the unit tests and builds a debug APK; a tag `vX.Y` builds the signed release APK and attaches it, with the Karoo extension manifest (`app/manifest.json`, generated at build time), to a GitHub release. Secrets: `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`; `karoo-ext` comes from GitHub Packages (`GITHUB_TOKEN`, or `GPR_TOKEN`; locally `gpr.user` / `gpr.key` in `local.properties`).
