@@ -31,7 +31,12 @@
     <string name="preload_running">Downloading…</string>
     <string name="preload_done">Done — %1$d water POIs in the route area (%2$d cached in all)</string>
     <string name="preload_failed">Download failed — %1$s</string>
-    <string name="preload_reason_offline">no connection. On the ride screen the Karoo switches its Wi‑Fi off: open this app from the home screen, or link the phone through the companion app.\n%1$s</string>
+    <string name="preload_reason_wifi_off">the Wi‑Fi is off. Switch it on in the control centre (swipe down from the top) and try again. On the ride screen the Karoo switches it off by itself: open this app from the home screen.\n%1$s</string>
+    <string name="preload_reason_wifi_unconnected">the Wi‑Fi is on but not connected to any network, and there is no phone link.\n%1$s</string>
+    <string name="preload_reason_offline">no internet through the Wi‑Fi, and no phone link.\n%1$s</string>
+    <string name="network_wifi_off">Wi‑Fi OFF — switch it on to download (control centre: swipe down from the top)</string>
+    <string name="network_wifi_unconnected">Wi‑Fi on, not connected to a network</string>
+    <string name="network_wifi_connected">Wi‑Fi connected</string>
     <string name="preload_reason_server">no Overpass server answered, try again in a few minutes.\n%1$s</string>
     <string name="preload_reason_unknown">check the connection.</string>
     <string name="home_area_ok">Home area (%1$d km): downloaded ✓</string>

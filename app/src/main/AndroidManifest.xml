@@ -4,6 +4,9 @@
 
     <!-- Download POI da Overpass API (solo con Karoo in tethering) -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The app screen tells whether the Wi-Fi is off before and after a download (1.2.1) -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Popup overlay sopra il ride-app -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 

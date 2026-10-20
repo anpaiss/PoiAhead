@@ -282,6 +282,15 @@
             android:text="—" />
 
         <TextView
+            android:id="@+id/tv_network"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textColor="#BDBDBD"
+            android:textSize="16sp"
+            android:text="—" />
+
+        <TextView
             android:id="@+id/tv_preload_result"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

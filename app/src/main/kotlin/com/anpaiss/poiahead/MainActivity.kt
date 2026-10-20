@@ -1,7 +1,11 @@
 package com.anpaiss.poiahead
 
+import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
+import android.net.wifi.WifiManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -168,16 +172,50 @@ class MainActivity : AppCompatActivity() {
                     if (ok) getString(R.string.preload_done, repo.lastFetched, count)
                     else getString(R.string.preload_failed, reason)
                 )
+                refreshNetwork()
                 refreshStatus()
             }
         }.start()
     }
 
-    /** The last failure in words: no link at all (and why that happens on the Karoo), or one line per Overpass server. */
+    /**
+     * The last failure in words. With no link at all the first thing to say is
+     * whether the Wi-Fi is simply off, which is what the ride screen does
+     * (Andrea, 20/10/2026: "if the Wi-Fi is off, tell them to switch it on");
+     * otherwise one line per Overpass server.
+     */
     private fun failureReason(f: OverpassFailure?): String = when {
         f == null -> getString(R.string.preload_reason_unknown)
-        f.offline -> getString(R.string.preload_reason_offline, f.lines())
+        f.offline -> when (netState()) {
+            Net.WIFI_OFF -> getString(R.string.preload_reason_wifi_off, f.lines())
+            Net.WIFI_NOT_CONNECTED -> getString(R.string.preload_reason_wifi_unconnected, f.lines())
+            Net.CONNECTED -> getString(R.string.preload_reason_offline, f.lines())
+        }
         else -> getString(R.string.preload_reason_server, f.lines())
+    }
+
+    private enum class Net { WIFI_OFF, WIFI_NOT_CONNECTED, CONNECTED }
+
+    /** The Karoo's own network as Android sees it; the phone link through the companion app is invisible here. */
+    private fun netState(): Net {
+        val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        if (!wifi.isWifiEnabled) return Net.WIFI_OFF
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val caps = cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }
+        return if (caps != null && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) Net.CONNECTED
+               else Net.WIFI_NOT_CONNECTED
+    }
+
+    /** The line above the download button: Wi-Fi off in amber with what to do, or connected in grey. */
+    private fun refreshNetwork() {
+        val tv = findViewById<TextView>(R.id.tv_network)
+        val (text, color) = when (netState()) {
+            Net.WIFI_OFF -> R.string.network_wifi_off to 0xFFFFB300.toInt()
+            Net.WIFI_NOT_CONNECTED -> R.string.network_wifi_unconnected to 0xFFFFB300.toInt()
+            Net.CONNECTED -> R.string.network_wifi_connected to 0xFFBDBDBD.toInt()
+        }
+        tv.text = getString(text)
+        tv.setTextColor(color)
     }
 
     /**
@@ -216,6 +254,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshOverlayUi()
+        refreshNetwork()
         refreshStatus()
         checkHomeArea()
     }

@@ -27,10 +27,11 @@ Each of the three can be switched off in the app, and the popup alerts also from
 
 ## What's new in 1.2
 
+- **"Wi‑Fi OFF — switch it on to download"**: the app screen says, above the download button, whether the Karoo's Wi‑Fi is off, on but not connected, or connected, and a failed download with no network starts with the same words. The ride screen switches the Wi‑Fi off by itself, so this is the first thing to check.
 - **Overpass servers that really answer.** 1.1 fell back to overpass.osm.ch, which covers Switzerland only and answers an empty, successful result everywhere else: when the main server was busy, a route elsewhere was cached as "no fountain" for 30 days. The list is now the FOSSGIS front end plus its two machines reached directly (lz4 and z) and overpass.private.coffee as last resort, all worldwide (checked with the same query in Italy, Austria, the US east and west coast, London and Sydney: identical counts); kumi.systems is gone (dead), maps.mail.ru is worldwide too but the Karoo does not trust its certificate. The wait per server is 60 s on the Karoo's Wi‑Fi, since the healthy ones take 25-40 s at busy hours (the Karoo's own channel over the phone link gives up after 30 s on its own).
 - **Download POIs for current route downloads again** even when the area is already cached, and the result says how many fountains the route area has, not the cache total.
 - **The failure says which server did what**, one line per server: `overpass-api.de: HTTP 502, server busy`, `z.overpass-api.de: no answer in 60 s`, and "no network" when the Karoo has no link at all.
-- **Download from the home screen.** On the ride screen the Karoo switches its Wi‑Fi off, so a download started from there finds no network: open the app from the home screen, or use the phone link.
+- **Download from the home screen.** On the ride screen the Karoo switches its Wi‑Fi off, so a download started from there finds no network: open the app from the home screen (the Wi‑Fi comes back in a few seconds), or use the phone link.
 
 ## What's new in 1.1
 
