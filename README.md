@@ -121,6 +121,10 @@ Bug reports and ideas are welcome as [issues](../../issues). Please include the 
 
 Water source data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, via the Overpass API (ODbL).
 
+## Support
+
+PoiAhead is free and open source, and will stay that way. If it made a ride better, you can [buy me a coffee on Ko-fi](https://ko-fi.com/anpaiss): it pays for the small things, a development board, a 3D-printed case, a few hours of testing on the trails.
+
 ## License
 
 MIT, see [LICENSE](LICENSE).
