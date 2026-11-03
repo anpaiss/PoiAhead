@@ -25,6 +25,10 @@ Each of the three can be switched off in the app, and the popup alerts also from
 
 ![The Water Ahead data page](docs/page.png)
 
+## What's new in 1.2.1
+
+- **78 % less CPU with the Karoo standing still.** Every 5 seconds PoiAhead sorted all the fountains in its cache by distance, thousands of them around home, even when you were not riding, and Android had to clean up after it. Now only the fountains within 10 km are sorted, the list is rebuilt only when the cache changes, and nothing is recomputed while you move less than 20 m. Popup, page and map show exactly the same fountains (a test checks it against the old computation on 5400 fountains). Measured on a Karoo with 5392 cached fountains: 1.1 % CPU before, 0.24 % after.
+
 ## What's new in 1.2
 
 - **"Wi‑Fi OFF — switch it on to download"**: the app screen says, above the download button, whether the Karoo's Wi‑Fi is off, on but not connected, or connected, and a failed download with no network starts with the same words. The ride screen switches the Wi‑Fi off by itself, so this is the first thing to check.
