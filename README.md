@@ -121,6 +121,13 @@ Bug reports and ideas are welcome as [issues](../../issues). Please include the 
 
 Water source data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, via the Overpass API (ODbL).
 
+## Is it safe?
+
+- The code is all here, open source.
+- `PoiAhead.apk` 1.2 on [VirusTotal](https://www.virustotal.com/gui/file/cc49c63657881f86d3b3cf68d2ca014da35e675ebb68786d80af8c847066e5b6): none of the 67 antivirus engines flag it.
+- Its SHA-256 is `cc49c63657881f86d3b3cf68d2ca014da35e675ebb68786d80af8c847066e5b6`; compare it with the file you downloaded (`certutil -hashfile PoiAhead.apk SHA256` on Windows, `sha256sum PoiAhead.apk` elsewhere).
+- The APK is built by GitHub Actions from the tagged source. From the next release it also carries a signed provenance, and the release notes link its VirusTotal report. Check the provenance with `gh attestation verify PoiAhead.apk -R anpaiss/PoiAhead`.
+
 ## Support
 
 PoiAhead is free and open source, and will stay that way. If it made a ride better, you can [buy me a coffee on Ko-fi](https://ko-fi.com/anpaiss): it pays for the small things, a development board, a 3D-printed case, a few hours of testing on the trails.
