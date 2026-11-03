@@ -61,4 +61,32 @@ class GeoUtilsTest {
     fun `bbox of an empty list is null`() {
         assertEquals(null, GeoUtils.bboxOf(emptyList(), 100.0))
     }
+
+    // ── nearbySorted: the boxed search must give what the full sort gave ──
+
+    private fun brute(pois: List<Poi>, lat: Double, lng: Double) =
+        pois.map { NearbyPoi(it, GeoUtils.haversineM(lat, lng, it.lat, it.lng)) }.sortedBy { it.distanceM }
+
+    private fun randomPois(n: Int, lat: Double, lng: Double, spreadDeg: Double, seed: Long): List<Poi> {
+        val r = java.util.Random(seed)
+        return List(n) { Poi("p$it", lat + (r.nextDouble() - 0.5) * spreadDeg, lng + (r.nextDouble() - 0.5) * spreadDeg, null) }
+    }
+
+    @Test
+    fun `nearbySorted matches the full sort within range and for the nearest ten`() {
+        val lat = 46.05; val lng = 11.45
+        // dense like the Karoo cache around home (about 5400 fountains over a 50 km area), and sparse
+        for ((pois, seed) in listOf(randomPois(5400, lat, lng, 0.9, 1L) to 1, randomPois(40, lat, lng, 2.0, 2L) to 2)) {
+            for (k in 0 until 20) {
+                val r = java.util.Random(seed * 100L + k)
+                val pLat = lat + (r.nextDouble() - 0.5) * 0.5; val pLng = lng + (r.nextDouble() - 0.5) * 0.5
+                val full = brute(pois, pLat, pLng)
+                val fast = GeoUtils.nearbySorted(pois, pLat, pLng, 10_000.0, 10)
+                assertEquals(full.take(10).map { it.poi.id }, fast.take(10).map { it.poi.id })
+                assertEquals(full.takeWhile { it.distanceM <= 10_000.0 }.map { it.poi.id },
+                    fast.takeWhile { it.distanceM <= 10_000.0 }.map { it.poi.id })
+                assertEquals(full.first().distanceM, fast.first().distanceM, 1e-9)
+            }
+        }
+    }
 }

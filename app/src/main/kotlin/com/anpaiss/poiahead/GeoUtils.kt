@@ -11,6 +11,29 @@ object GeoUtils {
     private const val EARTH_R = 6_371_000.0
 
     /** Distanza in metri tra due coordinate (haversine). */
+    /**
+     * The POIs within [rangeM] of a point, nearest first, and at least the
+     * [minCount] nearest: what [haversineM] on every POI and a full sort gave,
+     * without building an object per POI. A quick latitude/longitude box drops
+     * the far ones first; when fewer than [minCount] fall within range (a
+     * sparse area) it goes back to the full computation.
+     */
+    fun nearbySorted(pois: List<Poi>, lat: Double, lng: Double, rangeM: Double, minCount: Int): List<NearbyPoi> {
+        val dLat = rangeM * 1.01 / 111_320.0
+        val dLng = rangeM * 1.01 / (111_320.0 * kotlin.math.max(cos(Math.toRadians(lat)), 0.01))
+        val out = ArrayList<NearbyPoi>()
+        var inRange = 0
+        for (p in pois) {
+            if (kotlin.math.abs(p.lat - lat) > dLat || kotlin.math.abs(p.lng - lng) > dLng) continue
+            val d = haversineM(lat, lng, p.lat, p.lng)
+            if (d <= rangeM) inRange++
+            out.add(NearbyPoi(p, d))
+        }
+        if (inRange < minCount) return pois.map { NearbyPoi(it, haversineM(lat, lng, it.lat, it.lng)) }.sortedBy { it.distanceM }
+        out.sortBy { it.distanceM }
+        return out
+    }
+
     fun haversineM(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
         val dLat = Math.toRadians(lat2 - lat1)
         val dLon = Math.toRadians(lon2 - lon1)

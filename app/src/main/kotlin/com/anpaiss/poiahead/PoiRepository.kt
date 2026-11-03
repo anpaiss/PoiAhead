@@ -31,6 +31,8 @@ class PoiRepository internal constructor(
     private val pois  = LinkedHashMap<String, Poi>()   // id → poi
     private val areas = mutableListOf<Area>()
     private var loadedStamp = 0L  // lastModified del file al momento del load/save
+    /** allPois() as last built: the ticker asks every 5 s, the POIs change only on a fetch or a reload. */
+    private var listCache: List<Poi>? = null
 
     companion object {
         private const val TTL_MS = 30L * 24 * 3600 * 1000  // 30 giorni
@@ -51,8 +53,9 @@ class PoiRepository internal constructor(
             areas.clear()
             load()
             logger?.log("CACHE", "Cache ricaricata da disco: ${pois.size} POI, ${areas.size} aree")
+            listCache = null
         }
-        return pois.values.toList()
+        return listCache ?: pois.values.toList().also { listCache = it }
     }
 
     /** true se il bbox (s,w,n,e) è interamente dentro un'area coperta e fresca. */
@@ -138,6 +141,7 @@ class PoiRepository internal constructor(
         // Le aree più vecchie escono per prime; i POI restano (dedup per id)
         while (areas.size > MAX_AREAS) areas.removeAt(0)
         save()
+        listCache = null
     }
 
     private fun load() {

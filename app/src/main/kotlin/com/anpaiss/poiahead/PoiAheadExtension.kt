@@ -113,6 +113,8 @@ class PoiAheadExtension : KarooExtension("poi-ahead", BuildConfig.VERSION_NAME) 
         private const val AROUND_REFRESH_MS   = 600_000L // ricontrolla copertura ogni 10 min
         private const val MAP_MAX_POIS        = 50
         private const val MAP_RANGE_M         = 10_000.0
+        private const val NEARBY_REUSE_M      = 20.0
+        private const val PAGE_ROWS           = 10
         private const val POS_SAVE_MIN_MOVE_M = 500.0
         private const val SNAPSHOT_TICKS      = 12       // log timeline ogni ~60s
         // Corridor for the route projection: wider than any alert threshold so
@@ -345,7 +347,8 @@ class PoiAheadExtension : KarooExtension("poi-ahead", BuildConfig.VERSION_NAME) 
 
         // Water from every source: the OSM cache plus the route's own and the
         // account's water POIs. Other types are carried for the log only.
-        val all = repo.allPois() + routePoiList.filter { it.isWater } + accountPois.filter { it.isWater }
+        val osm = repo.allPois()
+        val all = osm + routePoiList.filter { it.isWater } + accountPois.filter { it.isWater }
         if (all.isEmpty()) {
             pageState.value = PoiPageState(enabled = prefs.pageEnabled,
                 status = "No POI data — ride with phone connected once")
@@ -353,9 +356,7 @@ class PoiAheadExtension : KarooExtension("poi-ahead", BuildConfig.VERSION_NAME) 
             return
         }
 
-        val nearby = all
-            .map { NearbyPoi(it, GeoUtils.haversineM(pos.first, pos.second, it.lat, it.lng)) }
-            .sortedBy { it.distanceM }
+        val nearby = nearbyFor(osm, all, pos)
 
         pageState.value = PoiPageState(
             enabled = prefs.pageEnabled,
@@ -396,6 +397,27 @@ class PoiAheadExtension : KarooExtension("poi-ahead", BuildConfig.VERSION_NAME) 
                 "poi=${all.size} " +
                 "nearest=${nearest?.let { "${it.poi.id}@${it.distanceM.toInt()}m" } ?: "-"}")
         }
+    }
+
+    // The nearest POIs, sorted. The ticker runs every 5 s even with the Karoo
+    // standing still: with thousands of cached fountains, sorting them all each
+    // time kept the CPU and the garbage collector busy (about 1 % around the
+    // clock, measured 3/11/2026). Same POIs and a position within
+    // NEARBY_REUSE_M of the last one: the last list is still right.
+    private var nearbyCache: List<NearbyPoi> = emptyList()
+    private var nearbyKey: Triple<Int, Double, Double>? = null
+
+    private fun nearbyFor(osm: List<Poi>, all: List<Poi>, pos: Pair<Double, Double>): List<NearbyPoi> {
+        val sig = System.identityHashCode(osm) * 31 + all.size * 7 +
+            routePoiList.hashCode() * 17 + accountPois.hashCode()
+        val k = nearbyKey
+        if (k != null && k.first == sig &&
+            GeoUtils.haversineM(k.second, k.third, pos.first, pos.second) < NEARBY_REUSE_M
+        ) return nearbyCache
+        val range = maxOf(MAP_RANGE_M, prefs.alertRadiusM.toDouble())
+        nearbyCache = GeoUtils.nearbySorted(all, pos.first, pos.second, range, PAGE_ROWS)
+        nearbyKey = Triple(sig, pos.first, pos.second)
+        return nearbyCache
     }
 
     /** Un log per coppia (poi, motivo): spiega nei log perché un popup non è scattato. */
