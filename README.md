@@ -125,6 +125,12 @@ Bug reports and ideas are welcome as [issues](../../issues). Please include the 
 
 Water source data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, via the Overpass API (ODbL).
 
+<!-- battery:poiahead -->
+## Battery use
+
+**< 0.1 % of the Karoo's battery use**, measured with Android's battery statistics (provisional, Karoo 3, 4 November 2026). How it was measured, and why the number is provisional: [the battery measurements of the extensions](https://lagorai.bike/blog/karoo-extensions-battery-use/).
+<!-- /battery:poiahead -->
+
 ## Is it safe?
 
 - The code is all here, open source.
