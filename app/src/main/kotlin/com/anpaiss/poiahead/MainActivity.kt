@@ -133,6 +133,9 @@ class MainActivity : AppCompatActivity() {
             if (!Settings.canDrawOverlays(this)) { refreshOverlayUi(); return@setOnClickListener }
             Handler(Looper.getMainLooper()).postDelayed({ testPopup.show(SAMPLE_POI, 250.0) }, 3_000L)
         }
+        findViewById<Button>(R.id.btn_field_preview).setOnClickListener {
+            startActivity(android.content.Intent(this, FieldPreviewActivity::class.java))
+        }
         findViewById<Button>(R.id.btn_preload_route).setOnClickListener {
             val bbox = prefs.currentRouteBbox
             if (bbox == null) {

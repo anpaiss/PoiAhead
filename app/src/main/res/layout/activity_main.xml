@@ -349,5 +349,13 @@
             android:layout_marginTop="8dp"
             android:text="@string/settings_test_popup" />
 
+        <!-- The page and the Switches field at real size, down to the smallest cell -->
+        <Button
+            android:id="@+id/btn_field_preview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="FIELD PREVIEW" />
+
     </LinearLayout>
 </ScrollView>

@@ -1,6 +1,10 @@
 package com.anpaiss.poiahead
 
 import android.content.Context
+import android.graphics.Paint
+import android.text.TextPaint
+import android.text.TextUtils
+import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
 import io.hammerhead.karooext.extension.DataTypeImpl
@@ -46,6 +50,14 @@ class PoiPageDataType(
     companion object {
         private const val REDRAW_THROTTLE_MS = 5_000L
         private const val MAX_ROWS = 10
+        // view_poi_page: 6 dp top padding, the 14sp header line, rows of 18sp text 4 dp apart
+        private const val TOP_DP = 6f
+        private const val HEADER_DP = 19f
+        private const val ROW_DP = 30.5f
+        /** Half the page is 238-240 px (127 dp): too narrow for a name and a distance side by side. */
+        private const val NARROW_BELOW_DP = 160f
+        private const val HEADER_SP = 14f
+        private const val NARROW_STATUS_SP = 14f
     }
 
     /** Exactly what ends up on screen; the redraw gate compares these. */
@@ -85,6 +97,14 @@ class PoiPageDataType(
     }
 
     override fun startView(context: Context, config: ViewConfig, emitter: ViewEmitter) {
+        // Only the rows that fit whole: in a third of the page the third row was cut in half by the
+        // border; in a half cell (238 px) the name next to the distance was cut to "Font…", so there
+        // the nearest name goes on top in place of the header and the distance alone below
+        // (field preview, 11/11/2026)
+        val heightDp = config.viewSize.second / context.resources.displayMetrics.density
+        val widthDp = config.viewSize.first / context.resources.displayMetrics.density
+        val narrow = widthDp < NARROW_BELOW_DP
+        val rowsThatFit = ((heightDp - TOP_DP - HEADER_DP) / ROW_DP).toInt().coerceIn(1, MAX_ROWS)
         val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         scope.launch {
             emitter.onNext(UpdateGraphicConfig(showHeader = false))
@@ -99,10 +119,31 @@ class PoiPageDataType(
                         views.setViewVisibility(R.id.tv_page_status, View.VISIBLE)
                         views.setTextViewText(R.id.tv_page_status, view.status)
                         rowIds.forEach { views.setViewVisibility(it, View.GONE) }
+                        if (narrow) {
+                            // The message takes the header's place, smaller: at 18sp under the header it ran out of the cell
+                            views.setViewVisibility(R.id.tv_page_header, View.GONE)
+                            views.setTextViewTextSize(R.id.tv_page_status, TypedValue.COMPLEX_UNIT_SP, NARROW_STATUS_SP)
+                        }
                     } else {
                         views.setViewVisibility(R.id.tv_page_status, View.GONE)
+                        if (narrow) {
+                            val first = view.rows.first()
+                            // Name on one line in place of the header, the distance centred below it: on two
+                            // lines the name pushed the distance over the bottom border
+                            // Shortened here: the TextView's own "…" with the letter spacing cut the start of the name too
+                            views.setTextViewText(R.id.tv_page_header, fitOneLine(context, first.first, config.viewSize.first))
+                            views.setInt(R.id.tv_page_header, "setMaxLines", 1)
+                            views.setViewVisibility(rowIds[0], View.VISIBLE)
+                            views.setTextViewText(nameIds[0], first.second)
+                            views.setTextColor(nameIds[0], context.getColor(R.color.page_distance))
+                            views.setInt(nameIds[0], "setGravity", android.view.Gravity.CENTER_HORIZONTAL)
+                            views.setTextViewText(distIds[0], "")
+                            for (i in 1 until rowIds.size) views.setViewVisibility(rowIds[i], View.GONE)
+                            emitter.updateView(views)
+                            return@collect
+                        }
                         for (i in rowIds.indices) {
-                            val row = view.rows.getOrNull(i)
+                            val row = if (i < rowsThatFit) view.rows.getOrNull(i) else null
                             if (row == null) {
                                 views.setViewVisibility(rowIds[i], View.GONE)
                             } else {
@@ -116,6 +157,17 @@ class PoiPageDataType(
                 }
         }
         emitter.setCancellable { scope.cancel() }
+    }
+
+    /** [text] cut with "…" to the header's width: 14sp, letter spacing 0.1, 10 dp padding each side. */
+    private fun fitOneLine(context: Context, text: String, cellWidthPx: Int): String {
+        val dm = context.resources.displayMetrics
+        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, HEADER_SP, dm)
+            letterSpacing = 0.1f
+        }
+        val room = cellWidthPx - 2 * 10 * dm.density - 4 * dm.density   // a little air for rounding
+        return TextUtils.ellipsize(text, paint, room, TextUtils.TruncateAt.END).toString()
     }
 
     private fun render(state: PoiPageState): PageView = when {
