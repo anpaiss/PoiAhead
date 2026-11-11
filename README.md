@@ -5,7 +5,7 @@
 
 # PoiAhead
 
-> **Version 1.2** — install the APK from the [latest release](../../releases/latest/download/PoiAhead.apk).
+> **Version 1.2.2** — install the APK from the [latest release](../../releases/latest/download/PoiAhead.apk).
 
 Drinking-water fountains from OpenStreetMap along your ride, on the Hammerhead Karoo. A popup tells you when a fountain is coming up and takes you there with one tap.
 
@@ -24,6 +24,12 @@ For now PoiAhead shows water only. The same machinery could later show other poi
 Each of the three can be switched off in the app, and the popup alerts also from the ride screen, through the **Switches** field (see below).
 
 ![The Water Ahead data page](docs/page.png)
+
+## What's new in 1.2.2
+
+- **Water Ahead page readable in small cells.** The page shows only the rows that fit whole: when it took a third of the screen, the third row was cut in half. In a half cell (a page with ten fields) the nearest fountain's name stays on one line with its distance below; before, it was cut to "Font…". The "no data" message is smaller and takes the header's place.
+- **FIELD PREVIEW in the app**: the page and the Switches field drawn by their own code at the real sizes of the Karoo cells, dark and light, to see how they look before putting them on a ride page.
+- **Switches field sized to its cell** (shared library 0.2.4): the caption fits a half cell, and ON / OFF no longer touches the edge.
 
 ## What's new in 1.2.1
 
