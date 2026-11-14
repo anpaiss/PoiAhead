@@ -476,8 +476,20 @@ class PoiAheadExtension : KarooExtension("poi-ahead", BuildConfig.VERSION_NAME) 
         sampleLog.alert("fired", candidate.poi.id,
             "air=${candidate.distanceM.toInt()}m popup=${popup.canShow()} route=${route.size >= 2}")
 
+        fun beep() {
+            if (prefs.beepEnabled) {
+                karooSystem.dispatch(
+                    PlayBeepPattern(listOf(
+                        PlayBeepPattern.Tone(800, 200),
+                        PlayBeepPattern.Tone(null, 100),
+                        PlayBeepPattern.Tone(800, 200),
+                    ))
+                )
+            }
+        }
         if (popup.canShow()) {
-            popup.show(candidate.poi, candidate.distanceM)
+            // Il bip quando il popup si vede: può aspettare il popup di un'altra estensione
+            popup.show(candidate.poi, candidate.distanceM, onShown = ::beep)
         } else {
             // Fallback senza permesso overlay: alert nativo, solo informativo
             karooSystem.dispatch(
@@ -491,15 +503,7 @@ class PoiAheadExtension : KarooExtension("poi-ahead", BuildConfig.VERSION_NAME) 
                     textColor     = R.color.alert_text,
                 )
             )
-        }
-        if (prefs.beepEnabled) {
-            karooSystem.dispatch(
-                PlayBeepPattern(listOf(
-                    PlayBeepPattern.Tone(800, 200),
-                    PlayBeepPattern.Tone(null, 100),
-                    PlayBeepPattern.Tone(800, 200),
-                ))
-            )
+            beep()
         }
         return AlertDecision(candidate.poi.id, "fired")
     }

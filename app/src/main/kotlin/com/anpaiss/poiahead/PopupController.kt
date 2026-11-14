@@ -14,6 +14,7 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.anpaiss.karooswitches.popupturn.PopupTurn
 
 /**
  * Popup overlay "Water in XXX m" con NAVIGATE / DISMISS.
@@ -25,6 +26,10 @@ import android.widget.TextView
  * La riga della distanza è viva: [onPosition] la ricalcola a ogni fix GPS finché
  * il popup è a schermo, e dice quando la fontana è ormai alle spalle
  * (vedi [PopupDistance]).
+ *
+ * Un popup alla volta fra le estensioni ([PopupTurn]): se un altro è a schermo
+ * aspetta, ricalcolando la distanza a ogni controllo; se la fontana resta alle
+ * spalle intanto, non esce più. Bip (onShown di [show]) e timeout quando si vede.
  */
 class PopupController(
     private val context: Context,
@@ -43,6 +48,10 @@ class PopupController(
     private var minSeenM = Double.MAX_VALUE
     private var lastLabel = ""
     private var awayLogged = false
+    private val turn = PopupTurn(context, "poiahead.poi") { logger.log("POPUP", it) }
+    // Ultimo fix GPS, per ricalcolare la distanza di un popup in attesa del turno
+    @Volatile private var lastLat = Double.NaN
+    @Volatile private var lastLng = Double.NaN
 
     companion object {
         private const val AUTO_DISMISS_MS = 25_000L
@@ -52,9 +61,17 @@ class PopupController(
 
     fun canShow(): Boolean = Settings.canDrawOverlays(context)
 
-    /** Mostra il popup per [poi]. Chiamabile da qualsiasi thread. */
-    fun show(poi: Poi, distanceM: Double) {
-        handler.post { showOnMain(poi, distanceM) }
+    /** Mostra il popup per [poi], poi [onShown]. Chiamabile da qualsiasi thread. */
+    fun show(poi: Poi, distanceM: Double, onShown: () -> Unit = {}) {
+        var nowM = distanceM
+        var minM = distanceM
+        turn.request(PopupTurn.PRIORITY_POI, AUTO_DISMISS_MS, stillWanted = {
+            val lat = lastLat
+            val lng = lastLng
+            if (!lat.isNaN()) nowM = GeoUtils.haversineM(lat, lng, poi.lat, poi.lng)
+            if (nowM < minM) minM = nowM
+            !PopupDistance.movingAway(nowM, minM)
+        }) { showOnMain(poi, nowM, onShown) }
     }
 
     fun hide() {
@@ -66,6 +83,8 @@ class PopupController(
      * una lettura volatile. Chiamabile da qualsiasi thread.
      */
     fun onPosition(lat: Double, lng: Double) {
+        lastLat = lat
+        lastLng = lng
         val poi = currentPoi ?: return
         val d = GeoUtils.haversineM(lat, lng, poi.lat, poi.lng)
         handler.post { updateDistanceOnMain(poi, d) }
@@ -87,9 +106,9 @@ class PopupController(
         }
     }
 
-    private fun showOnMain(poi: Poi, distanceM: Double) {
-        if (!canShow()) return
-        removeCurrent()
+    private fun showOnMain(poi: Poi, distanceM: Double, onShown: () -> Unit) {
+        if (!canShow()) { turn.done(); return }
+        removeView()
 
         val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         windowManager = wm
@@ -193,9 +212,11 @@ class PopupController(
                 currentPoi      = poi
                 logger.log("POPUP", "Mostrato: POI ${poi.id} a ${dist}")
                 handler.postDelayed({ autoDismiss(poi) }, AUTO_DISMISS_MS)
+                onShown()
             }
             .onFailure { e ->
                 logger.logError("POPUP", "addView fallita per POI ${poi.id}", e)
+                turn.done()
             }
     }
 
@@ -207,6 +228,11 @@ class PopupController(
     }
 
     private fun removeCurrent() {
+        removeView()
+        turn.done()
+    }
+
+    private fun removeView() {
         currentView?.let { v -> runCatching { windowManager?.removeView(v) } }
         currentView = null
         currentPoi  = null
