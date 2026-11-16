@@ -5,7 +5,7 @@
 
 # PoiAhead
 
-> **Version 1.2.2** — install the APK from the [latest release](../../releases/latest/download/PoiAhead.apk).
+> **Version 1.2.3** — install the APK from the [latest release](../../releases/latest/download/PoiAhead.apk).
 
 Drinking-water fountains from OpenStreetMap along your ride, on the Hammerhead Karoo. A popup tells you when a fountain is coming up and takes you there with one tap.
 
@@ -24,6 +24,10 @@ For now PoiAhead shows water only. The same machinery could later show other poi
 Each of the three can be switched off in the app, and the popup alerts also from the ride screen, through the **Switches** field (see below).
 
 ![The Water Ahead data page](docs/page.png)
+
+## What's new in 1.2.3
+
+- **One popup at a time with the other extensions by the same author.** When a fountain comes up while another popup is on screen, BetterETA's mandatory arrival time for one, the water popup waits instead of covering it, and appears as soon as the other one is closed or times out. While it waits the distance keeps being recomputed, so it shows the right number when it appears; its beep and its 25 seconds start only then. If the fountain is behind you by the time the screen is free, the popup is dropped. It works with BetterETA 1.1 or later (shared library [KarooSwitches](https://github.com/anpaiss/KarooSwitches) 0.4.0); popups of other extensions and of the Karoo itself do not take part.
 
 ## What's new in 1.2.2
 
@@ -75,6 +79,7 @@ Each extension ships the same field through the shared [KarooSwitches](https://g
 - With a route loaded and you on it, the fountain is within the **max detour** from the route line (50, 100 or 200 m, default 100). Without a route, or off route, the straight-line distance from you must be within the max detour instead: only fountains you are really passing by.
 - Only while the ride is recording, and not during the **quiet start** (the first 2, 5, 10, 20, 30 or 40 km, default 5: you leave with full bottles, and where fountains are everywhere you may only want to hear about them late in the ride).
 - One popup every two minutes at most; the same fountain can alert again after 30 minutes, so on an out-and-back it is still there on the way home.
+- If a popup of BetterETA is on screen, the water popup waits for it to close (see What's new in 1.2.3).
 
 Distances are straight-line. A fountain just behind you is as "close" as one ahead; the along-the-route version is being measured on real rides (see the technical notes) and will replace it when the numbers hold up.
 
