@@ -145,8 +145,8 @@ Water source data © [OpenStreetMap](https://www.openstreetmap.org/copyright) co
 ## Is it safe?
 
 - The code is all here, open source.
-- `PoiAhead.apk` 1.2.2 on [VirusTotal](https://www.virustotal.com/gui/file/565af1fda47a7fb1872b471099d19d6f7eafc650162de9c9b30f805afe89c51c): no antivirus engine flags it.
-- Its SHA-256 is `565af1fda47a7fb1872b471099d19d6f7eafc650162de9c9b30f805afe89c51c`; compare it with the file you downloaded (`certutil -hashfile PoiAhead.apk SHA256` on Windows, `sha256sum PoiAhead.apk` elsewhere).
+- `PoiAhead.apk` 1.2.3 on [VirusTotal](https://www.virustotal.com/gui/file/38d21ddb43fe2fa578698211bd4581837f5ccc0429379194a519ab540ba2e429): none of the 66 antivirus engines flag it.
+- Its SHA-256 is `38d21ddb43fe2fa578698211bd4581837f5ccc0429379194a519ab540ba2e429`; compare it with the file you downloaded (`certutil -hashfile PoiAhead.apk SHA256` on Windows, `sha256sum PoiAhead.apk` elsewhere).
 - The APK is built by GitHub Actions from the tagged source, with a signed provenance; each release's notes link its VirusTotal report. Check the provenance with `gh attestation verify PoiAhead.apk -R anpaiss/PoiAhead`.
 
 ## Support
